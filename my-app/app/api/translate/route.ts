@@ -1,344 +1,186 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+const SUPPORTED_LANGUAGES = [
+  "en",
+  "ko",
+  "es",
+  "fr",
+  "it",
+  "pt",
+  "de",
+  "pl",
+  "ja",
+  "zh",
+] as const;
 
-import {
-  createHash,
-} from "crypto";
+function normalizeLanguage(value: unknown) {
+  if (typeof value !== "string") {
+    return "";
+  }
 
+  return value
+    .trim()
+    .toLowerCase();
+}
 
-export const runtime =
-  "nodejs";
-
-export const dynamic =
-  "force-dynamic";
-
-
-const supabase =
-  createClient(
-    process.env
-      .NEXT_PUBLIC_SUPABASE_URL!,
-
-    process.env
-      .NEXT_PUBLIC_SUPABASE_ANON_KEY!
+function isSupportedLanguage(language: string) {
+  return SUPPORTED_LANGUAGES.includes(
+    language as (typeof SUPPORTED_LANGUAGES)[number]
   );
+}
 
+function getMyMemoryLanguage(language: string) {
+  if (language === "zh") {
+    return "zh-CN";
+  }
 
-const supportedLanguages =
-  new Set([
-    "en",
-    "ko",
-    "es",
-    "fr",
-    "it",
-    "pt",
-    "de",
-    "pl",
-    "ja",
-    "zh",
-  ]);
+  return language;
+}
 
+function getSupabase() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-function createTextHash(
-  text: string
-) {
-  return createHash(
-    "sha256"
-  )
-    .update(
-      text,
-      "utf8"
-    )
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    return null;
+  }
+
+  return createClient(
+    url,
+    key
+  );
+}
+
+function createTextHash(text: string) {
+  return createHash("sha256")
+    .update(text)
     .digest("hex");
 }
 
-
-function splitByUtf8Bytes(
+function splitTextByBytes(
   text: string,
   maxBytes = 450
 ) {
-  const chunks: string[] =
-    [];
+  const chunks: string[] = [];
 
   let current = "";
 
-  for (const char of text) {
-    const next =
-      current + char;
+  for (const character of text) {
+    const candidate =
+      current + character;
 
     if (
       Buffer.byteLength(
-        next,
+        candidate,
         "utf8"
       ) > maxBytes
     ) {
       if (current) {
-        chunks.push(
-          current
-        );
+        chunks.push(current);
       }
 
       current =
-        char;
+        character;
     } else {
       current =
-        next;
+        candidate;
     }
   }
 
   if (current) {
-    chunks.push(
-      current
-    );
+    chunks.push(current);
   }
 
   return chunks;
 }
 
-
-function decodeBasicEntities(
-  text: string
-) {
-  return text
-    .replace(
-      /&quot;/g,
-      '"'
-    )
-    .replace(
-      /&#39;/g,
-      "'"
-    )
-    .replace(
-      /&lt;/g,
-      "<"
-    )
-    .replace(
-      /&gt;/g,
-      ">"
-    )
-    .replace(
-      /&amp;/g,
-      "&"
-    );
-}
-
-
 async function translateChunk(
   text: string,
-  source: string,
-  target: string
+  sourceLanguage: string,
+  targetLanguage: string
 ) {
-  const url =
-    new URL(
-      "https://api.mymemory.translated.net/get"
+  const source =
+    getMyMemoryLanguage(
+      sourceLanguage
     );
 
-
-  url.searchParams.set(
-    "q",
-    text
-  );
-
-  url.searchParams.set(
-    "langpair",
-    `${source}|${target}`
-  );
-
-  url.searchParams.set(
-    "mt",
-    "1"
-  );
-
-
-  const email =
-    process.env
-      .MYMEMORY_EMAIL;
-
-
-  if (email) {
-    url.searchParams.set(
-      "de",
-      email
+  const target =
+    getMyMemoryLanguage(
+      targetLanguage
     );
-  }
 
+  const params =
+    new URLSearchParams({
+      q: text,
+      langpair: `${source}|${target}`,
+    });
 
   const response =
     await fetch(
-      url.toString(),
+      `https://api.mymemory.translated.net/get?${params.toString()}`,
       {
-        cache:
-          "no-store",
+        method: "GET",
+        cache: "no-store",
       }
     );
 
-
-  const rawText =
+  const raw =
     await response.text();
 
-
   if (!response.ok) {
+    console.error(
+      "MyMemory HTTP error:",
+      response.status,
+      raw.slice(0, 300)
+    );
+
     throw new Error(
-      "Translation service request failed."
+      `Translation API HTTP ${response.status}`
     );
   }
-
 
   let data: any;
 
-
   try {
     data =
-      JSON.parse(
-        rawText
-      );
+      JSON.parse(raw);
   } catch {
+    console.error(
+      "MyMemory invalid JSON:",
+      raw.slice(0, 300)
+    );
+
     throw new Error(
-      "Translation service returned an invalid response."
+      "Translation API returned invalid JSON"
     );
   }
-
-
-  if (
-    data.responseStatus &&
-    Number(
-      data.responseStatus
-    ) !== 200
-  ) {
-    throw new Error(
-      data.responseDetails ||
-        "Translation failed."
-    );
-  }
-
 
   const translatedText =
     data?.responseData
       ?.translatedText;
 
-
   if (
     typeof translatedText !==
-    "string"
+      "string" ||
+    !translatedText.trim()
   ) {
+    console.error(
+      "MyMemory empty response:",
+      data
+    );
+
     throw new Error(
-      "Translation result was empty."
+      "Translation result is empty"
     );
   }
 
-
-  return decodeBasicEntities(
-    translatedText
-  );
+  return translatedText;
 }
-
-
-async function findCachedTranslation(
-  hash: string,
-  source: string,
-  target: string
-) {
-  const {
-    data,
-    error,
-  } = await supabase
-    .from(
-      "translation_cache"
-    )
-    .select(
-      "translated_text"
-    )
-    .eq(
-      "source_hash",
-      hash
-    )
-    .eq(
-      "source_language",
-      source
-    )
-    .eq(
-      "target_language",
-      target
-    )
-    .maybeSingle();
-
-
-  if (error) {
-    console.error(
-      "Translation cache read error:",
-      error
-    );
-
-    return null;
-  }
-
-
-  if (
-    !data ||
-    typeof data.translated_text !==
-      "string"
-  ) {
-    return null;
-  }
-
-
-  return data.translated_text;
-}
-
-
-async function saveTranslationToCache(
-  hash: string,
-  text: string,
-  source: string,
-  target: string,
-  translatedText: string
-) {
-  const {
-    error,
-  } = await supabase
-    .from(
-      "translation_cache"
-    )
-    .upsert(
-      {
-        source_hash:
-          hash,
-
-        source_text:
-          text,
-
-        source_language:
-          source,
-
-        target_language:
-          target,
-
-        translated_text:
-          translatedText,
-      },
-      {
-        onConflict:
-          "source_hash,source_language,target_language",
-
-        ignoreDuplicates:
-          true,
-      }
-    );
-
-
-  if (error) {
-    console.error(
-      "Translation cache save error:",
-      error
-    );
-  }
-}
-
 
 export async function POST(
   request: NextRequest
@@ -347,27 +189,25 @@ export async function POST(
     const body =
       await request.json();
 
-
     const text =
-      typeof body.text ===
+      typeof body?.text ===
       "string"
         ? body.text.trim()
         : "";
 
+    const sourceLanguage =
+      normalizeLanguage(
+        body?.sourceLanguage ??
+          body?.source_language ??
+          body?.source
+      );
 
-    const source =
-      typeof body.source ===
-      "string"
-        ? body.source
-        : "";
-
-
-    const target =
-      typeof body.target ===
-      "string"
-        ? body.target
-        : "";
-
+    const targetLanguage =
+      normalizeLanguage(
+        body?.targetLanguage ??
+          body?.target_language ??
+          body?.target
+      );
 
     if (!text) {
       return NextResponse.json(
@@ -381,34 +221,17 @@ export async function POST(
       );
     }
 
-
     if (
-      text.length > 3000
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Text is too long.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-
-    if (
-      !supportedLanguages.has(
-        source
-      ) ||
-      !supportedLanguages.has(
-        target
+      !isSupportedLanguage(
+        sourceLanguage
       )
     ) {
       return NextResponse.json(
         {
           error:
-            "Unsupported language.",
+            "Unsupported source language.",
+          received:
+            sourceLanguage,
         },
         {
           status: 400,
@@ -416,136 +239,168 @@ export async function POST(
       );
     }
 
-
     if (
-      source === target
+      !isSupportedLanguage(
+        targetLanguage
+      )
     ) {
       return NextResponse.json(
         {
-          translatedText:
-            text,
-
-          cached:
-            true,
+          error:
+            "Unsupported target language.",
+          received:
+            targetLanguage,
+        },
+        {
+          status: 400,
         }
       );
     }
 
-
-    const hash =
-      createTextHash(
-        text
-      );
-
-
-    // =================================
-    // 1. SUPABASE CACHE CHECK
-    // =================================
-
-    const cachedTranslation =
-      await findCachedTranslation(
-        hash,
-        source,
-        target
-      );
-
-
     if (
-      cachedTranslation
+      sourceLanguage ===
+      targetLanguage
     ) {
-      console.log(
-        `Translation cache HIT: ${source} -> ${target}`
-      );
-
-
-      return NextResponse.json(
-        {
-          translatedText:
-            cachedTranslation,
-
-          cached:
-            true,
-        }
-      );
+      return NextResponse.json({
+        translatedText:
+          text,
+        cached: false,
+      });
     }
 
+    const supabase =
+      getSupabase();
 
-    // =================================
-    // 2. TRANSLATION API
-    // =================================
+    const sourceHash =
+      createTextHash(text);
 
-    console.log(
-      `Translation cache MISS: ${source} -> ${target}`
-    );
+    /*
+     * TRANSLATION CACHE CHECK
+     */
 
+    if (supabase) {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from(
+          "translation_cache"
+        )
+        .select(
+          "translated_text"
+        )
+        .eq(
+          "source_hash",
+          sourceHash
+        )
+        .eq(
+          "source_language",
+          sourceLanguage
+        )
+        .eq(
+          "target_language",
+          targetLanguage
+        )
+        .maybeSingle();
+
+      if (error) {
+        console.log(
+          "Translation cache read skipped:",
+          error.message
+        );
+      }
+
+      if (
+        data?.translated_text
+      ) {
+        return NextResponse.json({
+          translatedText:
+            data.translated_text,
+          cached: true,
+        });
+      }
+    }
+
+    /*
+     * TRANSLATE
+     */
 
     const chunks =
-      splitByUtf8Bytes(
-        text
-      );
+      splitTextByBytes(text);
 
+    const translatedParts: string[] =
+      [];
 
-    const results:
-      string[] = [];
-
-
-    for (
-      const chunk
-      of chunks
-    ) {
+    for (const chunk of chunks) {
       const translated =
         await translateChunk(
           chunk,
-          source,
-          target
+          sourceLanguage,
+          targetLanguage
         );
 
-
-      results.push(
+      translatedParts.push(
         translated
       );
     }
 
-
     const translatedText =
-      results.join("");
+      translatedParts.join("");
 
+    /*
+     * CACHE SAVE
+     */
 
-    // =================================
-    // 3. SAVE CACHE
-    // =================================
+    if (supabase) {
+      const {
+        error,
+      } = await supabase
+        .from(
+          "translation_cache"
+        )
+        .insert({
+          source_hash:
+            sourceHash,
 
-    await saveTranslationToCache(
-      hash,
-      text,
-      source,
-      target,
-      translatedText
-    );
+          source_text:
+            text,
 
+          source_language:
+            sourceLanguage,
 
-    return NextResponse.json(
-      {
-        translatedText,
+          target_language:
+            targetLanguage,
 
-        cached:
-          false,
+          translated_text:
+            translatedText,
+        });
+
+      if (
+        error &&
+        error.code !==
+          "23505"
+      ) {
+        console.log(
+          "Translation cache save skipped:",
+          error.message
+        );
       }
-    );
+    }
+
+    return NextResponse.json({
+      translatedText,
+      cached: false,
+    });
   } catch (error) {
     console.error(
-      "Translation API error:",
+      "Translation route error:",
       error
     );
-
 
     return NextResponse.json(
       {
         error:
-          error instanceof
-          Error
-            ? error.message
-            : "Translation failed.",
+          "Translation failed.",
       },
       {
         status: 500,

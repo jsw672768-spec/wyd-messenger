@@ -2,12 +2,14 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 
 import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 
 type Language = {
   code: string;
@@ -27,488 +29,229 @@ const languages: Language[] = [
   { code: "zh", name: "中文" },
 ];
 
-const copy: Record<string, any> = {
+const copy: Record<string, Record<string, string>> = {
   en: {
     tagline: "Speak without borders,",
     hero: "WYD.",
     description:
-      "Talk with everyone, in every language, from one room.",
+      "Join an international event or create a temporary multilingual network.",
 
     scan: "Scan QR",
-    scanAccent: "Join an existing room",
+    scanAccent: "Join an event",
     scanDescription:
-      "Scan someone's QR and join the conversation instantly.",
+      "Scan an event or room QR and enter instantly.",
 
-    create: "Create room",
-    createAccent: "Start a new conversation",
+    create: "Create event",
+    createAccent: "Start a multilingual network",
     createDescription:
-      "Create your own room and share the QR with people around you.",
+      "Create an event, share one QR, and bring everyone together.",
 
     noAccount: "No account required",
 
-    scannerTitle: "Scan a room QR",
+    scannerTitle: "Scan WYD QR",
     scannerDescription:
-      "Point your camera at a WYD Messenger QR code.",
+      "Point your camera at a WYD event or room QR code.",
 
-    invalidQR:
-      "This is not a WYD Messenger room QR.",
-
+    invalidQR: "This is not a valid WYD QR code.",
     cameraError:
       "The camera could not be opened. Please allow camera access.",
 
     close: "Close",
 
-    chooseLanguage:
-      "Choose your language",
-
+    chooseLanguage: "Choose your language",
     languageDescription:
-      "Messages and announcements will be translated into this language.",
+      "Messages and announcements will appear in your language.",
+
+    createEvent: "Create event",
+    eventName: "Event name",
+    eventNamePlaceholder: "WYD Seoul 2027",
+    descriptionLabel: "Description",
+    descriptionPlaceholder:
+      "International youth gathering",
+    start: "Start",
+    end: "End",
+    optional: "Optional",
+    creating: "Creating...",
+    createButton: "Create event",
+    eventError:
+      "The event could not be created. Please try again.",
   },
 
   ko: {
     tagline: "언어의 경계 없이,",
     hero: "WYD.",
     description:
-      "하나의 방에서, 모든 언어로 대화하세요.",
+      "국제 행사에 참여하거나 잠깐 존재하는 다국어 네트워크를 만들어보세요.",
 
     scan: "QR 스캔",
-    scanAccent: "기존 채팅방에 참여하기",
+    scanAccent: "이벤트 참여하기",
     scanDescription:
-      "누군가의 QR을 스캔해서 바로 대화에 참여하세요.",
+      "이벤트나 채팅방 QR을 스캔해 바로 참여하세요.",
 
-    create: "채팅방 만들기",
-    createAccent: "새로운 대화 시작하기",
+    create: "이벤트 만들기",
+    createAccent: "다국어 네트워크 시작",
     createDescription:
-      "나만의 채팅방을 만들고 QR을 주변 사람들과 공유하세요.",
+      "이벤트를 만들고 하나의 QR로 모두를 연결하세요.",
 
-    noAccount:
-      "회원가입 없이 사용 가능",
+    noAccount: "회원가입 없이 사용 가능",
 
-    scannerTitle:
-      "채팅방 QR 스캔",
-
+    scannerTitle: "WYD QR 스캔",
     scannerDescription:
-      "WYD Messenger QR이 카메라 안에 들어오도록 맞춰주세요.",
+      "WYD 이벤트 또는 채팅방 QR을 카메라에 맞춰주세요.",
 
-    invalidQR:
-      "WYD Messenger 채팅방 QR이 아닙니다.",
-
+    invalidQR: "올바른 WYD QR 코드가 아닙니다.",
     cameraError:
       "카메라를 열 수 없습니다. 카메라 권한을 허용해주세요.",
 
     close: "닫기",
 
-    chooseLanguage:
-      "언어를 선택하세요",
-
+    chooseLanguage: "언어를 선택하세요",
     languageDescription:
-      "메시지와 공지가 선택한 언어로 번역됩니다.",
+      "메시지와 공지가 선택한 언어로 표시됩니다.",
+
+    createEvent: "이벤트 만들기",
+    eventName: "이벤트 이름",
+    eventNamePlaceholder: "WYD Seoul 2027",
+    descriptionLabel: "설명",
+    descriptionPlaceholder:
+      "국제 청년 행사",
+    start: "시작",
+    end: "종료",
+    optional: "선택",
+    creating: "만드는 중...",
+    createButton: "이벤트 만들기",
+    eventError:
+      "이벤트를 만들지 못했습니다. 다시 시도해주세요.",
   },
 
   es: {
     tagline: "Habla sin fronteras,",
     hero: "WYD.",
     description:
-      "Habla con todos, en cualquier idioma, desde una sola sala.",
+      "Únete a un evento internacional o crea una red multilingüe temporal.",
 
     scan: "Escanear QR",
-    scanAccent: "Unirse a una sala",
+    scanAccent: "Unirse a un evento",
     scanDescription:
-      "Escanea un QR y únete a la conversación.",
+      "Escanea un QR de evento o sala para entrar.",
 
-    create: "Crear sala",
-    createAccent: "Iniciar conversación",
+    create: "Crear evento",
+    createAccent: "Crear una red multilingüe",
     createDescription:
-      "Crea tu sala y comparte el QR.",
+      "Crea un evento y conecta a todos con un solo QR.",
 
-    noAccount:
-      "No necesitas una cuenta",
+    noAccount: "No necesitas una cuenta",
 
-    scannerTitle:
-      "Escanear QR",
-
+    scannerTitle: "Escanear QR de WYD",
     scannerDescription:
-      "Apunta la cámara a un QR de WYD Messenger.",
+      "Apunta la cámara a un QR de evento o sala de WYD.",
 
-    invalidQR:
-      "Este QR no pertenece a una sala de WYD Messenger.",
-
+    invalidQR: "Este no es un QR válido de WYD.",
     cameraError:
       "No se pudo abrir la cámara.",
 
     close: "Cerrar",
 
-    chooseLanguage:
-      "Elige tu idioma",
-
+    chooseLanguage: "Elige tu idioma",
     languageDescription:
-      "Los mensajes y anuncios se traducirán a este idioma.",
-  },
-
-  fr: {
-    tagline: "Parlez sans frontières,",
-    hero: "WYD.",
-    description:
-      "Discutez avec tout le monde, dans toutes les langues.",
-
-    scan: "Scanner le QR",
-    scanAccent: "Rejoindre une salle",
-    scanDescription:
-      "Scannez un QR pour rejoindre la conversation.",
-
-    create: "Créer une salle",
-    createAccent:
-      "Commencer une conversation",
-    createDescription:
-      "Créez votre salle et partagez le QR.",
-
-    noAccount:
-      "Aucun compte nécessaire",
-
-    scannerTitle:
-      "Scanner un QR",
-
-    scannerDescription:
-      "Placez le QR WYD Messenger devant la caméra.",
-
-    invalidQR:
-      "Ce QR ne correspond pas à une salle WYD Messenger.",
-
-    cameraError:
-      "Impossible d'ouvrir la caméra.",
-
-    close: "Fermer",
-
-    chooseLanguage:
-      "Choisissez votre langue",
-
-    languageDescription:
-      "Les messages seront traduits dans cette langue.",
-  },
-
-  it: {
-    tagline: "Parla senza confini,",
-    hero: "WYD.",
-    description:
-      "Parla con tutti, in ogni lingua, in una sola stanza.",
-
-    scan: "Scansiona QR",
-    scanAccent: "Entra in una stanza",
-    scanDescription:
-      "Scansiona un QR e partecipa alla conversazione.",
-
-    create: "Crea stanza",
-    createAccent:
-      "Inizia una conversazione",
-    createDescription:
-      "Crea la tua stanza e condividi il QR.",
-
-    noAccount:
-      "Nessun account necessario",
-
-    scannerTitle:
-      "Scansiona QR",
-
-    scannerDescription:
-      "Inquadra un QR di WYD Messenger.",
-
-    invalidQR:
-      "Questo QR non appartiene a WYD Messenger.",
-
-    cameraError:
-      "Impossibile aprire la fotocamera.",
-
-    close: "Chiudi",
-
-    chooseLanguage:
-      "Scegli la tua lingua",
-
-    languageDescription:
-      "I messaggi saranno tradotti in questa lingua.",
-  },
-
-  pt: {
-    tagline: "Fale sem fronteiras,",
-    hero: "WYD.",
-    description:
-      "Converse com todos, em qualquer idioma, em uma única sala.",
-
-    scan: "Escanear QR",
-    scanAccent: "Entrar em uma sala",
-    scanDescription:
-      "Escaneie um QR e entre na conversa.",
-
-    create: "Criar sala",
-    createAccent:
-      "Iniciar uma conversa",
-    createDescription:
-      "Crie sua sala e compartilhe o QR.",
-
-    noAccount:
-      "Nenhuma conta necessária",
-
-    scannerTitle:
-      "Escanear QR",
-
-    scannerDescription:
-      "Aponte a câmera para um QR do WYD Messenger.",
-
-    invalidQR:
-      "Este QR não pertence ao WYD Messenger.",
-
-    cameraError:
-      "Não foi possível abrir a câmera.",
-
-    close: "Fechar",
-
-    chooseLanguage:
-      "Escolha seu idioma",
-
-    languageDescription:
-      "As mensagens serão traduzidas para este idioma.",
-  },
-
-  de: {
-    tagline: "Sprich ohne Grenzen,",
-    hero: "WYD.",
-    description:
-      "Sprich mit allen, in jeder Sprache, in einem Raum.",
-
-    scan: "QR scannen",
-    scanAccent: "Raum beitreten",
-    scanDescription:
-      "Scanne einen QR-Code und tritt dem Gespräch bei.",
-
-    create: "Raum erstellen",
-    createAccent:
-      "Gespräch starten",
-    createDescription:
-      "Erstelle einen Raum und teile den QR-Code.",
-
-    noAccount:
-      "Kein Konto erforderlich",
-
-    scannerTitle:
-      "QR scannen",
-
-    scannerDescription:
-      "Richte die Kamera auf einen WYD Messenger QR-Code.",
-
-    invalidQR:
-      "Dieser QR-Code gehört nicht zu WYD Messenger.",
-
-    cameraError:
-      "Die Kamera konnte nicht geöffnet werden.",
-
-    close: "Schließen",
-
-    chooseLanguage:
-      "Wähle deine Sprache",
-
-    languageDescription:
-      "Nachrichten werden in diese Sprache übersetzt.",
-  },
-
-  pl: {
-    tagline: "Rozmawiaj bez granic,",
-    hero: "WYD.",
-    description:
-      "Rozmawiaj ze wszystkimi, w każdym języku, w jednym pokoju.",
-
-    scan: "Skanuj QR",
-    scanAccent: "Dołącz do pokoju",
-    scanDescription:
-      "Zeskanuj QR i dołącz do rozmowy.",
-
-    create: "Utwórz pokój",
-    createAccent:
-      "Rozpocznij rozmowę",
-    createDescription:
-      "Utwórz pokój i udostępnij kod QR.",
-
-    noAccount:
-      "Konto nie jest wymagane",
-
-    scannerTitle:
-      "Skanuj QR",
-
-    scannerDescription:
-      "Skieruj aparat na kod QR WYD Messenger.",
-
-    invalidQR:
-      "To nie jest kod QR pokoju WYD Messenger.",
-
-    cameraError:
-      "Nie można otworzyć aparatu.",
-
-    close: "Zamknij",
-
-    chooseLanguage:
-      "Wybierz język",
-
-    languageDescription:
-      "Wiadomości będą tłumaczone na ten język.",
-  },
-
-  ja: {
-    tagline: "言葉の壁を越えて、",
-    hero: "WYD.",
-    description:
-      "ひとつのルームで、すべての言語で話しましょう。",
-
-    scan: "QRをスキャン",
-    scanAccent: "ルームに参加",
-    scanDescription:
-      "QRを読み取って会話に参加できます。",
-
-    create: "ルームを作成",
-    createAccent:
-      "新しい会話を始める",
-    createDescription:
-      "ルームを作ってQRを共有しましょう。",
-
-    noAccount:
-      "アカウント不要",
-
-    scannerTitle:
-      "QRをスキャン",
-
-    scannerDescription:
-      "WYD MessengerのQRコードをカメラに映してください。",
-
-    invalidQR:
-      "WYD MessengerのルームQRではありません。",
-
-    cameraError:
-      "カメラを開けませんでした。",
-
-    close: "閉じる",
-
-    chooseLanguage:
-      "言語を選択",
-
-    languageDescription:
-      "メッセージはこの言語に翻訳されます。",
-  },
-
-  zh: {
-    tagline: "跨越语言的界限，",
-    hero: "WYD.",
-    description:
-      "在一个房间里，用所有语言交流。",
-
-    scan: "扫描二维码",
-    scanAccent: "加入聊天室",
-    scanDescription:
-      "扫描二维码并立即加入对话。",
-
-    create: "创建聊天室",
-    createAccent:
-      "开始新的对话",
-    createDescription:
-      "创建聊天室并分享二维码。",
-
-    noAccount:
-      "无需注册账号",
-
-    scannerTitle:
-      "扫描二维码",
-
-    scannerDescription:
-      "将 WYD Messenger 二维码对准摄像头。",
-
-    invalidQR:
-      "这不是 WYD Messenger 聊天室二维码。",
-
-    cameraError:
-      "无法打开摄像头。",
-
-    close: "关闭",
-
-    chooseLanguage:
-      "选择语言",
-
-    languageDescription:
-      "消息将翻译成此语言。",
+      "Los mensajes y anuncios aparecerán en tu idioma.",
+
+    createEvent: "Crear evento",
+    eventName: "Nombre del evento",
+    eventNamePlaceholder: "WYD Seoul 2027",
+    descriptionLabel: "Descripción",
+    descriptionPlaceholder:
+      "Encuentro internacional de jóvenes",
+    start: "Inicio",
+    end: "Fin",
+    optional: "Opcional",
+    creating: "Creando...",
+    createButton: "Crear evento",
+    eventError:
+      "No se pudo crear el evento.",
   },
 };
 
 export default function Home() {
-  const router =
-    useRouter();
+  const router = useRouter();
 
-  const scannerRef =
-    useRef<any>(null);
+  const supabase = useMemo(() => {
+    const url =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-  const scanningRef =
-    useRef(false);
+    const key =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
+    if (!url || !key) {
+      return null;
+    }
 
-  const [
-    languageChecked,
-    setLanguageChecked,
-  ] = useState(false);
+    return createClient(url, key);
+  }, []);
 
-  const [
-    language,
-    setLanguage,
-  ] = useState("en");
+  const scannerRef = useRef<any>(null);
+  const scanningRef = useRef(false);
 
-  const [
-    firstLanguageChoice,
-    setFirstLanguageChoice,
-  ] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [languageChecked, setLanguageChecked] =
+    useState(false);
 
-  const [
-    showLanguage,
-    setShowLanguage,
-  ] = useState(false);
+  const [language, setLanguage] = useState("en");
 
-  const [
-    showScanner,
-    setShowScanner,
-  ] = useState(false);
+  const [firstLanguageChoice, setFirstLanguageChoice] =
+    useState(false);
 
-  const [
-    scannerError,
-    setScannerError,
-  ] = useState("");
+  const [showLanguage, setShowLanguage] =
+    useState(false);
 
-  const t =
-    copy[language] ||
-    copy.en;
+  const [showScanner, setShowScanner] =
+    useState(false);
+
+  const [scannerError, setScannerError] =
+    useState("");
+
+  const [showCreateEvent, setShowCreateEvent] =
+    useState(false);
+
+  const [eventName, setEventName] =
+    useState("");
+
+  const [eventDescription, setEventDescription] =
+    useState("");
+
+  const [eventStart, setEventStart] =
+    useState("");
+
+  const [eventEnd, setEventEnd] =
+    useState("");
+
+  const [creatingEvent, setCreatingEvent] =
+    useState(false);
+
+  const [eventError, setEventError] =
+    useState("");
+
+  const t = copy[language] || copy.en;
 
   useEffect(() => {
     const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
+      localStorage.getItem("wyd_language");
 
     if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
+      setLanguage(savedLanguage);
 
       document.documentElement.lang =
         savedLanguage;
     } else {
-      setFirstLanguageChoice(
-        true
-      );
+      setFirstLanguageChoice(true);
     }
 
-    setLanguageChecked(
-      true
-    );
+    setLanguageChecked(true);
 
     const timer =
       setTimeout(() => {
         setLoading(false);
-      }, 1400);
+      }, 1200);
 
     return () =>
       clearTimeout(timer);
@@ -519,8 +262,7 @@ export default function Home() {
       return;
     }
 
-    let cancelled =
-      false;
+    let cancelled = false;
 
     async function startScanner() {
       try {
@@ -549,8 +291,7 @@ export default function Home() {
 
         await scanner.start(
           {
-            facingMode:
-              "environment",
+            facingMode: "environment",
           },
           {
             fps: 10,
@@ -571,16 +312,14 @@ export default function Home() {
 
             try {
               const url =
-                new URL(
-                  decodedText
+                new URL(decodedText);
+
+              const validPath =
+                /^\/(event|room)\/[^/]+\/?$/.test(
+                  url.pathname
                 );
 
-              const roomMatch =
-                url.pathname.match(
-                  /^\/room\/([^/]+)/
-                );
-
-              if (!roomMatch) {
+              if (!validPath) {
                 setScannerError(
                   t.invalidQR
                 );
@@ -598,12 +337,14 @@ export default function Home() {
               scannerRef.current =
                 null;
 
-              setShowScanner(
-                false
-              );
+              setShowScanner(false);
 
+              /*
+               * QR에 다른 도메인이 들어 있어도
+               * 현재 WYD 주소에서 같은 path만 연다.
+               */
               window.location.href =
-                decodedText;
+                `${window.location.origin}${url.pathname}`;
             } catch {
               setScannerError(
                 t.invalidQR
@@ -647,6 +388,8 @@ export default function Home() {
   }, [
     showScanner,
     language,
+    t.invalidQR,
+    t.cameraError,
   ]);
 
   function selectLanguage(
@@ -662,23 +405,191 @@ export default function Home() {
     document.documentElement.lang =
       code;
 
-    setFirstLanguageChoice(
-      false
-    );
-
-    setShowLanguage(
-      false
-    );
+    setFirstLanguageChoice(false);
+    setShowLanguage(false);
   }
 
-  function createRoom() {
-    const roomId =
-      crypto.randomUUID()
-        .slice(0, 8);
+  function getSenderId() {
+    let senderId =
+      localStorage.getItem(
+        "wyd_sender_id"
+      );
 
-    router.push(
-      `/room/${roomId}`
-    );
+    if (!senderId) {
+      senderId =
+        crypto.randomUUID();
+
+      localStorage.setItem(
+        "wyd_sender_id",
+        senderId
+      );
+    }
+
+    return senderId;
+  }
+
+  async function createEvent() {
+    if (
+      !supabase ||
+      !eventName.trim() ||
+      creatingEvent
+    ) {
+      return;
+    }
+
+    setCreatingEvent(true);
+    setEventError("");
+
+    const senderId =
+      getSenderId();
+
+    const eventId =
+      crypto
+        .randomUUID()
+        .replaceAll("-", "")
+        .slice(0, 10);
+
+    const generalRoomId =
+      crypto
+        .randomUUID()
+        .replaceAll("-", "")
+        .slice(0, 10);
+
+    try {
+      const {
+        error: eventInsertError,
+      } = await supabase
+        .from("events")
+        .insert({
+          id: eventId,
+
+          name:
+            eventName.trim(),
+
+          description:
+            eventDescription.trim() ||
+            null,
+
+          owner_id:
+            senderId,
+
+          status:
+            "active",
+
+          start_at:
+            eventStart
+              ? new Date(
+                  eventStart
+                ).toISOString()
+              : null,
+
+          end_at:
+            eventEnd
+              ? new Date(
+                  eventEnd
+                ).toISOString()
+              : null,
+        });
+
+      if (eventInsertError) {
+        throw eventInsertError;
+      }
+
+      const {
+        error: roomInsertError,
+      } = await supabase
+        .from("rooms")
+        .insert({
+          id:
+            generalRoomId,
+
+          event_id:
+            eventId,
+
+          name:
+            "General",
+
+          room_type:
+            "general",
+
+          sort_order:
+            0,
+
+          owner_id:
+            senderId,
+
+          status:
+            "active",
+        });
+
+      if (roomInsertError) {
+        throw roomInsertError;
+      }
+
+      const displayName =
+        localStorage.getItem(
+          "wyd_display_name"
+        );
+
+      if (displayName) {
+        const {
+          error:
+            participantError,
+        } = await supabase
+          .from(
+            "event_participants"
+          )
+          .upsert(
+            {
+              event_id:
+                eventId,
+
+              user_id:
+                senderId,
+
+              display_name:
+                displayName,
+
+              language,
+
+              role:
+                "organizer",
+
+              updated_at:
+                new Date()
+                  .toISOString(),
+            },
+            {
+              onConflict:
+                "event_id,user_id",
+            }
+          );
+
+        if (
+          participantError
+        ) {
+          console.error(
+            "Organizer participant error:",
+            participantError
+          );
+        }
+      }
+
+      router.push(
+        `/event/${eventId}`
+      );
+    } catch (error) {
+      console.error(
+        "Create event error:",
+        error
+      );
+
+      setEventError(
+        t.eventError
+      );
+
+      setCreatingEvent(false);
+    }
   }
 
   async function closeScanner() {
@@ -696,10 +607,7 @@ export default function Home() {
         null;
     }
 
-    setShowScanner(
-      false
-    );
-
+    setShowScanner(false);
     setScannerError("");
   }
 
@@ -737,9 +645,7 @@ export default function Home() {
   ) {
     return (
       <LanguageScreen
-        language={
-          language
-        }
+        language={language}
         onSelect={
           selectLanguage
         }
@@ -752,49 +658,21 @@ export default function Home() {
 
       <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-[#fffefb]">
 
-        {/* SOFT BACKGROUND ACCENT */}
-
-        <div className="pointer-events-none absolute right-[-130px] top-[245px] h-[360px] w-[360px] rounded-full bg-[#ffe66b]/25 blur-[3px]" />
-
-        <div className="pointer-events-none absolute right-[-70px] top-[315px] h-[210px] w-[210px] rounded-full bg-[#fff4b8]/40 blur-3xl" />
-
+        <div className="pointer-events-none absolute right-[-150px] top-[255px] h-[350px] w-[350px] rounded-full bg-[#ffe66b]/20" />
 
         {/* HEADER */}
 
         <header className="relative z-10 flex items-start justify-between px-6 pt-8">
 
-          <div>
-
-            <div className="relative inline-block">
-
-              <h1 className="text-[34px] font-black tracking-[-0.06em]">
-                WYD
-              </h1>
-
-              <span className="absolute -right-3 top-0 h-3 w-3 rounded-full bg-[#FFD43B]" />
-
-            </div>
-
-            <p className="mt-[-3px] text-[11px] lowercase tracking-[0.22em] text-neutral-400">
-              messenger
-            </p>
-
-          </div>
+          <Brand />
 
 
           <button
             onClick={() =>
-              setShowLanguage(
-                true
-              )
+              setShowLanguage(true)
             }
-            className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-3 shadow-[0_8px_25px_rgba(0,0,0,0.04)] backdrop-blur"
+            className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-3 shadow-[0_8px_25px_rgba(0,0,0,0.04)]"
           >
-
-            <span className="text-[15px]">
-              ◉
-            </span>
-
             <span className="text-xs font-semibold">
               {
                 languages.find(
@@ -805,10 +683,9 @@ export default function Home() {
               }
             </span>
 
-            <span className="ml-1 text-xs text-neutral-400">
-             ⌄
+            <span className="text-xs text-neutral-400">
+              ⌄
             </span>
-
           </button>
 
         </header>
@@ -816,12 +693,11 @@ export default function Home() {
 
         {/* HERO */}
 
-        <section className="relative z-10 px-6 pt-[17vh]">
+        <section className="relative z-10 px-6 pt-[16vh]">
 
           <p className="text-[35px] font-light leading-tight tracking-[-0.04em]">
             {t.tagline}
           </p>
-
 
           <div className="relative mt-3 inline-block">
 
@@ -833,49 +709,28 @@ export default function Home() {
 
           </div>
 
-
-          <p className="mt-7 max-w-[300px] text-[15px] leading-7 text-neutral-500">
+          <p className="mt-7 max-w-[315px] text-[15px] leading-7 text-neutral-500">
             {t.description}
           </p>
 
         </section>
 
 
-        {/* ACTION CARDS */}
+        {/* ACTIONS */}
 
         <section className="relative z-10 mt-auto space-y-4 px-5 pb-7 pt-14">
-
-          {/* QR CARD */}
 
           <button
             onClick={() => {
               setScannerError("");
-
-              setShowScanner(
-                true
-              );
+              setShowScanner(true);
             }}
-            className="group flex w-full items-center rounded-[30px] border border-[#dceaff] bg-[#f8fbff]/95 p-5 text-left shadow-[0_12px_35px_rgba(51,104,200,0.07)] transition active:scale-[0.985]"
+            className="flex w-full items-center rounded-[30px] border border-[#dceaff] bg-[#f8fbff]/95 p-5 text-left shadow-[0_12px_35px_rgba(51,104,200,0.07)] active:scale-[0.985]"
           >
 
             <div className="flex h-[78px] w-[78px] shrink-0 items-center justify-center rounded-[25px] bg-[#e9f2ff]">
-
-              <div className="relative flex h-11 w-11 items-center justify-center">
-
-                <span className="absolute left-0 top-0 h-3 w-3 rounded-tl-md border-l-[3px] border-t-[3px] border-[#2868d8]" />
-
-                <span className="absolute right-0 top-0 h-3 w-3 rounded-tr-md border-r-[3px] border-t-[3px] border-[#2868d8]" />
-
-                <span className="absolute bottom-0 left-0 h-3 w-3 rounded-bl-md border-b-[3px] border-l-[3px] border-[#2868d8]" />
-
-                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-br-md border-b-[3px] border-r-[3px] border-[#2868d8]" />
-
-                <div className="h-4 w-4 rounded-[4px] border-[3px] border-[#2868d8]" />
-
-              </div>
-
+              <QrIcon />
             </div>
-
 
             <div className="min-w-0 flex-1 px-5">
 
@@ -893,21 +748,19 @@ export default function Home() {
 
             </div>
 
-
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-[25px] font-light text-[#2868d8] shadow-[0_6px_20px_rgba(0,0,0,0.05)]">
-              →
-            </div>
+            <CircleArrow blue />
 
           </button>
 
 
-          {/* CREATE CARD */}
-
           <button
-            onClick={
-              createRoom
-            }
-            className="group flex w-full items-center rounded-[30px] border border-[#fff0c7] bg-[#fffdf8]/95 p-5 text-left shadow-[0_12px_35px_rgba(240,179,40,0.06)] transition active:scale-[0.985]"
+            onClick={() => {
+              setEventError("");
+              setShowCreateEvent(
+                true
+              );
+            }}
+            className="flex w-full items-center rounded-[30px] border border-[#fff0c7] bg-[#fffdf8]/95 p-5 text-left shadow-[0_12px_35px_rgba(240,179,40,0.06)] active:scale-[0.985]"
           >
 
             <div className="flex h-[78px] w-[78px] shrink-0 items-center justify-center rounded-[25px] bg-[#fff4d4]">
@@ -917,7 +770,6 @@ export default function Home() {
               </span>
 
             </div>
-
 
             <div className="min-w-0 flex-1 px-5">
 
@@ -935,34 +787,164 @@ export default function Home() {
 
             </div>
 
-
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-[25px] font-light text-[#e7a30c] shadow-[0_6px_20px_rgba(0,0,0,0.05)]">
-              →
-            </div>
+            <CircleArrow />
 
           </button>
 
 
-          {/* FOOTER */}
-
-          <div className="flex items-center justify-center gap-2 pt-4">
-
-            <div className="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-300 text-[10px] text-neutral-400">
-              ✓
-            </div>
-
-            <p className="text-[11px] text-neutral-400">
-              {t.noAccount}
-            </p>
-
-          </div>
+          <p className="pt-3 text-center text-[11px] text-neutral-400">
+            ✓ {t.noAccount}
+          </p>
 
         </section>
 
       </div>
 
 
-      {/* QR SCANNER */}
+      {/* CREATE EVENT */}
+
+      {showCreateEvent && (
+
+        <Sheet
+          onClose={() => {
+            if (
+              !creatingEvent
+            ) {
+              setShowCreateEvent(
+                false
+              );
+            }
+          }}
+        >
+
+          <SheetHeader
+            eyebrow="WYD EVENT"
+            title={t.createEvent}
+            onClose={() => {
+              if (
+                !creatingEvent
+              ) {
+                setShowCreateEvent(
+                  false
+                );
+              }
+            }}
+          />
+
+
+          <div className="mt-6 space-y-4">
+
+            <FieldLabel>
+              {t.eventName}
+            </FieldLabel>
+
+            <input
+              autoFocus
+              value={eventName}
+              onChange={(event) =>
+                setEventName(
+                  event.target.value
+                )
+              }
+              placeholder={
+                t.eventNamePlaceholder
+              }
+              className="w-full rounded-[20px] bg-[#f5f5f2] px-4 py-4 text-sm outline-none"
+            />
+
+
+            <FieldLabel>
+              {t.descriptionLabel}
+              <span className="ml-1 font-normal text-neutral-300">
+                · {t.optional}
+              </span>
+            </FieldLabel>
+
+            <textarea
+              value={eventDescription}
+              onChange={(event) =>
+                setEventDescription(
+                  event.target.value
+                )
+              }
+              placeholder={
+                t.descriptionPlaceholder
+              }
+              rows={3}
+              className="w-full resize-none rounded-[20px] bg-[#f5f5f2] px-4 py-4 text-sm leading-6 outline-none"
+            />
+
+
+            <div className="grid grid-cols-2 gap-3">
+
+              <div>
+                <FieldLabel>
+                  {t.start}
+                </FieldLabel>
+
+                <input
+                  type="datetime-local"
+                  value={eventStart}
+                  onChange={(event) =>
+                    setEventStart(
+                      event.target.value
+                    )
+                  }
+                  className="mt-2 w-full rounded-[18px] bg-[#f5f5f2] px-3 py-4 text-[11px] outline-none"
+                />
+              </div>
+
+
+              <div>
+                <FieldLabel>
+                  {t.end}
+                </FieldLabel>
+
+                <input
+                  type="datetime-local"
+                  value={eventEnd}
+                  onChange={(event) =>
+                    setEventEnd(
+                      event.target.value
+                    )
+                  }
+                  className="mt-2 w-full rounded-[18px] bg-[#f5f5f2] px-3 py-4 text-[11px] outline-none"
+                />
+              </div>
+
+            </div>
+
+
+            {eventError && (
+
+              <div className="rounded-[18px] bg-red-50 px-4 py-3 text-xs text-red-500">
+                {eventError}
+              </div>
+
+            )}
+
+
+            <button
+              onClick={createEvent}
+              disabled={
+                !eventName.trim() ||
+                creatingEvent
+              }
+              className="w-full rounded-[20px] bg-[#2868d8] py-4 text-sm font-bold text-white disabled:bg-neutral-200"
+            >
+              {creatingEvent
+                ? t.creating
+                : t.createButton}
+            </button>
+
+          </div>
+
+        </Sheet>
+
+      )}
+
+
+      {/* SCANNER */}
 
       {showScanner && (
 
@@ -972,34 +954,19 @@ export default function Home() {
           }
         >
 
-          <div className="flex items-start justify-between">
+          <SheetHeader
+            eyebrow="WYD"
+            title={
+              t.scannerTitle
+            }
+            onClose={
+              closeScanner
+            }
+          />
 
-            <div>
-
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#2868d8]">
-                WYD
-              </p>
-
-              <h2 className="mt-2 text-[28px] font-bold tracking-[-0.045em]">
-                {t.scannerTitle}
-              </h2>
-
-            </div>
-
-
-            <CloseButton
-              onClick={
-                closeScanner
-              }
-            />
-
-          </div>
-
-
-          <p className="mt-3 max-w-[300px] text-sm leading-6 text-neutral-500">
+          <p className="mt-3 text-sm leading-6 text-neutral-500">
             {t.scannerDescription}
           </p>
-
 
           <div className="mt-6 overflow-hidden rounded-[28px] bg-[#101820] p-2">
 
@@ -1010,19 +977,13 @@ export default function Home() {
 
           </div>
 
-
           {scannerError && (
 
-            <div className="mt-4 rounded-[18px] bg-red-50 px-4 py-3">
-
-              <p className="text-xs leading-5 text-red-600">
-                {scannerError}
-              </p>
-
+            <div className="mt-4 rounded-[18px] bg-red-50 px-4 py-3 text-xs leading-5 text-red-600">
+              {scannerError}
             </div>
 
           )}
-
 
           <button
             onClick={
@@ -1069,6 +1030,80 @@ export default function Home() {
 }
 
 
+function Brand() {
+  return (
+    <div>
+
+      <div className="relative inline-block">
+
+        <h1 className="text-[34px] font-black tracking-[-0.06em]">
+          WYD
+        </h1>
+
+        <span className="absolute -right-3 top-0 h-3 w-3 rounded-full bg-[#FFD43B]" />
+
+      </div>
+
+      <p className="mt-[-3px] text-[10px] lowercase tracking-[0.22em] text-neutral-400">
+        messenger
+      </p>
+
+    </div>
+  );
+}
+
+
+function QrIcon() {
+  return (
+    <div className="relative h-11 w-11 text-[#2868d8]">
+
+      <span className="absolute left-0 top-0 h-3.5 w-3.5 rounded-tl-md border-l-[3px] border-t-[3px] border-current" />
+
+      <span className="absolute right-0 top-0 h-3.5 w-3.5 rounded-tr-md border-r-[3px] border-t-[3px] border-current" />
+
+      <span className="absolute bottom-0 left-0 h-3.5 w-3.5 rounded-bl-md border-b-[3px] border-l-[3px] border-current" />
+
+      <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-br-md border-b-[3px] border-r-[3px] border-current" />
+
+      <span className="absolute left-[15px] top-[15px] h-3 w-3 rounded-[3px] border-[3px] border-current" />
+
+    </div>
+  );
+}
+
+
+function CircleArrow({
+  blue = false,
+}: {
+  blue?: boolean;
+}) {
+  return (
+    <div
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-[25px] font-light shadow-[0_6px_20px_rgba(0,0,0,0.05)] ${
+        blue
+          ? "text-[#2868d8]"
+          : "text-[#e7a30c]"
+      }`}
+    >
+      →
+    </div>
+  );
+}
+
+
+function FieldLabel({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <p className="text-[11px] font-bold text-[#101820]">
+      {children}
+    </p>
+  );
+}
+
+
 function Sheet({
   children,
   onClose,
@@ -1078,17 +1113,15 @@ function Sheet({
 }) {
   return (
     <div
-      onClick={
-        onClose
-      }
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/35 px-3 pb-3 backdrop-blur-sm sm:items-center"
+      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/30 px-3 pb-3 backdrop-blur-sm sm:items-center"
     >
 
       <div
         onClick={(event) =>
           event.stopPropagation()
         }
-        className="w-full max-w-[410px] rounded-[32px] bg-[#fffefb] p-6 shadow-2xl"
+        className="max-h-[92dvh] w-full max-w-[410px] overflow-y-auto rounded-[32px] bg-[#fffefb] p-6 shadow-2xl"
       >
         {children}
       </div>
@@ -1098,20 +1131,38 @@ function Sheet({
 }
 
 
-function CloseButton({
-  onClick,
+function SheetHeader({
+  eyebrow,
+  title,
+  onClose,
 }: {
-  onClick: () => void;
+  eyebrow: string;
+  title: string;
+  onClose: () => void;
 }) {
   return (
-    <button
-      onClick={
-        onClick
-      }
-      className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f4f4f2] text-xl"
-    >
-      ×
-    </button>
+    <div className="flex items-start justify-between gap-4">
+
+      <div>
+
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2868d8]">
+          {eyebrow}
+        </p>
+
+        <h2 className="mt-2 text-[28px] font-bold tracking-[-0.045em]">
+          {title}
+        </h2>
+
+      </div>
+
+      <button
+        onClick={onClose}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f4f4f2] text-xl"
+      >
+        ×
+      </button>
+
+    </div>
   );
 }
 
@@ -1130,24 +1181,11 @@ function LanguageScreen({
 
       <div className="mx-auto min-h-[calc(100dvh-32px)] w-full max-w-[430px] rounded-[34px] bg-[#fffefb] px-6 py-8">
 
-        <div className="relative inline-block">
-
-          <h1 className="text-[34px] font-black tracking-[-0.06em]">
-            WYD
-          </h1>
-
-          <span className="absolute -right-3 top-0 h-3 w-3 rounded-full bg-[#FFD43B]" />
-
-        </div>
-
-        <p className="mt-[-3px] text-[10px] lowercase tracking-[0.22em] text-neutral-400">
-          messenger
-        </p>
-
+        <Brand />
 
         <div className="mt-16">
 
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#2868d8]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2868d8]">
             Language
           </p>
 
@@ -1158,19 +1196,14 @@ function LanguageScreen({
           </h2>
 
           <p className="mt-5 max-w-[310px] text-sm leading-6 text-neutral-500">
-            Messages and announcements will be translated into the language you choose.
+            Messages and announcements will appear in the language you choose.
           </p>
 
         </div>
 
-
         <LanguageList
-          language={
-            language
-          }
-          onSelect={
-            onSelect
-          }
+          language={language}
+          onSelect={onSelect}
         />
 
       </div>
@@ -1196,48 +1229,21 @@ function LanguageModal({
   onClose: () => void;
 }) {
   return (
-    <Sheet
-      onClose={
-        onClose
-      }
-    >
+    <Sheet onClose={onClose}>
 
-      <div className="flex items-start justify-between">
+      <SheetHeader
+        eyebrow="Language"
+        title={title}
+        onClose={onClose}
+      />
 
-        <div>
-
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#2868d8]">
-            Language
-          </p>
-
-          <h2 className="mt-2 text-[28px] font-bold tracking-[-0.045em]">
-            {title}
-          </h2>
-
-        </div>
-
-
-        <CloseButton
-          onClick={
-            onClose
-          }
-        />
-
-      </div>
-
-
-      <p className="mt-3 max-w-[300px] text-sm leading-6 text-neutral-500">
+      <p className="mt-3 text-sm leading-6 text-neutral-500">
         {description}
       </p>
 
-
       <LanguageList
-        language={
-          language
-        }
-        onSelect={
-          onSelect
-        }
+        language={language}
+        onSelect={onSelect}
       />
 
     </Sheet>
@@ -1255,7 +1261,7 @@ function LanguageList({
   ) => void;
 }) {
   return (
-    <div className="mt-7 max-h-[55vh] space-y-2 overflow-y-auto">
+    <div className="mt-6 max-h-[55vh] space-y-2 overflow-y-auto">
 
       {languages.map(
         (item) => {
@@ -1266,15 +1272,11 @@ function LanguageList({
 
           return (
             <button
-              key={
-                item.code
-              }
+              key={item.code}
               onClick={() =>
-                onSelect(
-                  item.code
-                )
+                onSelect(item.code)
               }
-              className={`flex w-full items-center justify-between rounded-[18px] px-5 py-4 text-left transition active:scale-[0.99] ${
+              className={`flex w-full items-center justify-between rounded-[18px] px-5 py-4 text-left ${
                 selected
                   ? "bg-[#101820] text-white"
                   : "bg-[#f5f5f2] text-[#101820]"
@@ -1285,9 +1287,8 @@ function LanguageList({
                 {item.name}
               </span>
 
-
               {selected && (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FFD43B] text-[11px] font-bold text-[#101820]">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FFD43B] text-[10px] font-bold text-[#101820]">
                   ✓
                 </span>
               )}

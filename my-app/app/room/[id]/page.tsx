@@ -1,28 +1,17 @@
 "use client";
 
 import {
+  FormEvent,
+  ReactNode,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 
-import {
-  useParams,
-  useRouter,
-} from "next/navigation";
-
-import {
-  createClient,
-} from "@supabase/supabase-js";
-
-import {
-  QRCodeSVG,
-} from "qrcode.react";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { useParams, useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+import { QRCodeSVG } from "qrcode.react";
 
 type Message = {
   id: number;
@@ -33,35 +22,20 @@ type Message = {
   created_at: string;
 };
 
-type Priority =
-  | "normal"
-  | "important"
-  | "urgent";
-
 type Announcement = {
   id: number;
   room_id: string;
   author_id: string;
   content: string;
   source_language: string;
-  priority: Priority;
+  priority: "normal" | "important" | "urgent";
   created_at: string;
 };
 
-type OnlineParticipant = {
-  user_id: string;
-  name: string;
-  language: string;
-};
-
-type ParticipantRecord = {
+type Participant = {
   user_id: string;
   display_name: string;
   language: string;
-};
-
-type ReadCount = {
-  [announcementId: number]: number;
 };
 
 const languages = [
@@ -77,1823 +51,1405 @@ const languages = [
   { code: "zh", name: "中文" },
 ];
 
-const copy: Record<string, any> = {
+const copy: Record<string, Record<string, string>> = {
   en: {
-    room: "Room",
-    peopleOnline: "online",
+    online: "online",
+    menu: "Room menu",
     participants: "Participants",
     language: "Language",
     announcements: "Announcements",
-    qrCode: "QR code",
+    qr: "QR code",
     changeName: "Change name",
-    roomMenu: "Room menu",
+    writeAnnouncement: "Write announcement",
+
+    leave: "Leave room",
+    endRoom: "End room",
+
+    leaveTitle: "Leave this room?",
+    leaveDescription:
+      "You can join again later using the QR code.",
+    leaveEventDescription:
+      "You will return to the event. You can enter this or another room anytime.",
+    leaveButton: "Leave",
+
+    endTitle: "End this room?",
+    endDescription:
+      "Everyone will be disconnected and this QR will no longer reopen the room.",
+    endButton: "End room",
+
+    endedTitle: "This room has ended.",
+    endedDescription:
+      "The host ended this conversation. This room can no longer be joined.",
+
+    goHome: "Back to WYD",
+    backToEvent: "Back to event",
+
+    messagePlaceholder: "Message",
+    noMessages: "Start the conversation.",
+
+    original: "Original",
+    translated: "Translated",
+
     host: "Host",
     you: "You",
 
-    yourName: "Your name",
-    nameDescription:
-      "Choose the name people in this room will see.",
-    namePlaceholder: "Enter your name",
-    continue: "Continue",
-
-    noAnnouncement: "No announcements yet",
-    writeAnnouncement: "Write announcement",
+    announcement: "Announcement",
     newAnnouncement: "New announcement",
     editAnnouncement: "Edit announcement",
-    allAnnouncements: "All announcements",
 
-    priority: "Priority",
     normal: "Normal",
     important: "Important",
     urgent: "Urgent",
 
-    announcementPlaceholder:
-      "Write something everyone should know...",
-    publish: "Publish",
-    save: "Save changes",
-    cancel: "Cancel",
+    save: "Save",
     edit: "Edit",
     delete: "Delete",
-
+    cancel: "Cancel",
+    deleteQuestion: "Delete this announcement?",
     confirmed: "confirmed",
-    latest: "Latest",
 
-    message: "Message...",
-    start: "Start a conversation",
-    startDescription:
-      "Invite people with the QR code and start talking.",
+    roomQR: "Room QR",
+    qrDescription: "Scan this QR code to join this room.",
 
-    join: "Join this room",
-    joinDescription:
-      "Scan this QR code to join the conversation.",
-    close: "Close",
+    chooseLanguage: "Choose language",
 
-    chooseLanguage: "Choose your language",
-
-    translated: "Translated",
-    translating: "Translating...",
-    original: "Original",
-    viewOriginal: "View original",
-    viewTranslation: "View translation",
-
-    deleteTitle: "Delete announcement?",
-    deleteDescription:
-      "This announcement will disappear for everyone in the room.",
-    deleteConfirm: "Delete announcement",
+    yourName: "Your name",
+    nameDescription:
+      "This name will be shown to people in the room.",
+    enterName: "Enter your name",
+    continue: "Continue",
 
     actions: "Actions",
+    noAnnouncements: "No announcements yet.",
   },
 
   ko: {
-    room: "채팅방",
-    peopleOnline: "명 참여 중",
+    online: "명 접속 중",
+    menu: "채팅방 메뉴",
     participants: "참가자",
     language: "언어",
-    announcements: "공지사항",
-    qrCode: "QR 코드",
+    announcements: "공지",
+    qr: "QR 코드",
     changeName: "이름 변경",
-    roomMenu: "채팅방 메뉴",
+    writeAnnouncement: "공지 작성",
+
+    leave: "채팅방 나가기",
+    endRoom: "채팅방 종료",
+
+    leaveTitle: "채팅방에서 나갈까요?",
+    leaveDescription:
+      "나중에 같은 QR을 이용해 다시 참여할 수 있어요.",
+    leaveEventDescription:
+      "이벤트 페이지로 돌아갑니다. 다른 채팅방이나 이 방에 언제든 다시 들어올 수 있어요.",
+    leaveButton: "나가기",
+
+    endTitle: "채팅방을 종료할까요?",
+    endDescription:
+      "모든 참가자에게 종료 화면이 표시되고 이 QR로는 더 이상 참여할 수 없어요.",
+    endButton: "채팅방 종료",
+
+    endedTitle: "채팅방이 종료되었습니다.",
+    endedDescription:
+      "방장이 대화를 종료했습니다. 이 채팅방에는 더 이상 참여할 수 없습니다.",
+
+    goHome: "WYD 홈으로",
+    backToEvent: "이벤트로 돌아가기",
+
+    messagePlaceholder: "메시지",
+    noMessages: "대화를 시작해보세요.",
+
+    original: "원문",
+    translated: "번역됨",
+
     host: "방장",
     you: "나",
 
-    yourName: "이름을 알려주세요",
-    nameDescription:
-      "이 채팅방의 다른 사람들에게 표시될 이름입니다.",
-    namePlaceholder: "이름 입력",
-    continue: "계속",
-
-    noAnnouncement: "아직 공지가 없습니다",
-    writeAnnouncement: "공지 작성",
-    newAnnouncement: "새 공지 작성",
+    announcement: "공지",
+    newAnnouncement: "새 공지",
     editAnnouncement: "공지 수정",
-    allAnnouncements: "전체 공지",
 
-    priority: "공지 중요도",
     normal: "일반",
     important: "중요",
     urgent: "긴급",
 
-    announcementPlaceholder:
-      "모두에게 전달할 내용을 입력하세요...",
-    publish: "공지하기",
-    save: "수정 완료",
-    cancel: "취소",
+    save: "저장",
     edit: "수정",
     delete: "삭제",
+    cancel: "취소",
+    deleteQuestion: "이 공지를 삭제할까요?",
+    confirmed: "확인",
 
-    confirmed: "명 확인",
-    latest: "최신",
+    roomQR: "채팅방 QR",
+    qrDescription:
+      "이 QR을 스캔하면 같은 채팅방에 참여할 수 있어요.",
 
-    message: "메시지를 입력하세요...",
-    start: "대화를 시작해보세요",
-    startDescription:
-      "QR로 사람들을 초대하고 대화를 시작하세요.",
+    chooseLanguage: "언어 선택",
 
-    join: "이 채팅방에 참여하세요",
-    joinDescription:
-      "QR을 스캔하면 이 대화에 바로 참여할 수 있어요.",
-    close: "닫기",
+    yourName: "이름",
+    nameDescription:
+      "채팅방 사람들에게 표시될 이름이에요.",
+    enterName: "이름을 입력하세요",
+    continue: "계속",
 
-    chooseLanguage: "언어를 선택하세요",
-
-    translated: "번역됨",
-    translating: "번역 중...",
-    original: "원문",
-    viewOriginal: "원문 보기",
-    viewTranslation: "번역 보기",
-
-    deleteTitle: "공지를 삭제할까요?",
-    deleteDescription:
-      "삭제하면 채팅방의 모든 사람에게서 이 공지가 사라집니다.",
-    deleteConfirm: "공지 삭제",
-
-    actions: "메뉴",
+    actions: "기능",
+    noAnnouncements: "아직 공지가 없어요.",
   },
 
   es: {
-    room: "Sala",
-    peopleOnline: "en línea",
+    online: "en línea",
+    menu: "Menú de la sala",
     participants: "Participantes",
     language: "Idioma",
     announcements: "Anuncios",
-    qrCode: "Código QR",
+    qr: "Código QR",
     changeName: "Cambiar nombre",
-    roomMenu: "Menú de sala",
-    host: "Anfitrión",
+    writeAnnouncement: "Nuevo anuncio",
+
+    leave: "Salir de la sala",
+    endRoom: "Finalizar sala",
+
+    leaveTitle: "¿Salir de la sala?",
+    leaveDescription:
+      "Puedes volver a entrar usando el QR.",
+    leaveEventDescription:
+      "Volverás al evento. Puedes entrar en esta sala o en otra cuando quieras.",
+    leaveButton: "Salir",
+
+    endTitle: "¿Finalizar esta sala?",
+    endDescription:
+      "Todos serán desconectados y el QR dejará de funcionar.",
+    endButton: "Finalizar",
+
+    endedTitle: "Esta sala ha terminado.",
+    endedDescription:
+      "El anfitrión terminó esta conversación.",
+
+    goHome: "Volver a WYD",
+    backToEvent: "Volver al evento",
+
+    messagePlaceholder: "Mensaje",
+    noMessages: "Inicia la conversación.",
+
+    original: "Original",
+    translated: "Traducido",
+
+    host: "Host",
     you: "Tú",
 
-    yourName: "Tu nombre",
-    nameDescription:
-      "Elige el nombre que verán las personas de esta sala.",
-    namePlaceholder: "Escribe tu nombre",
-    continue: "Continuar",
-
-    noAnnouncement: "No hay anuncios",
-    writeAnnouncement: "Nuevo anuncio",
+    announcement: "Anuncio",
     newAnnouncement: "Nuevo anuncio",
     editAnnouncement: "Editar anuncio",
-    allAnnouncements: "Todos los anuncios",
 
-    priority: "Prioridad",
     normal: "Normal",
     important: "Importante",
     urgent: "Urgente",
 
-    announcementPlaceholder:
-      "Escribe algo que todos deban saber...",
-    publish: "Publicar",
     save: "Guardar",
-    cancel: "Cancelar",
     edit: "Editar",
     delete: "Eliminar",
+    cancel: "Cancelar",
+    deleteQuestion: "¿Eliminar este anuncio?",
+    confirmed: "confirmado",
 
-    confirmed: "confirmados",
-    latest: "Último",
+    roomQR: "QR de la sala",
+    qrDescription: "Escanea este QR para unirte.",
 
-    message: "Mensaje...",
-    start: "Empieza a hablar",
-    startDescription:
-      "Invita a personas con el QR y empieza a hablar.",
+    chooseLanguage: "Elegir idioma",
 
-    join: "Únete a esta sala",
-    joinDescription:
-      "Escanea este QR para unirte a la conversación.",
-    close: "Cerrar",
-
-    chooseLanguage: "Elige tu idioma",
-
-    translated: "Traducido",
-    translating: "Traduciendo...",
-    original: "Original",
-    viewOriginal: "Ver original",
-    viewTranslation: "Ver traducción",
-
-    deleteTitle: "¿Eliminar anuncio?",
-    deleteDescription:
-      "El anuncio desaparecerá para todos.",
-    deleteConfirm: "Eliminar anuncio",
+    yourName: "Tu nombre",
+    nameDescription:
+      "Este nombre será visible en la sala.",
+    enterName: "Escribe tu nombre",
+    continue: "Continuar",
 
     actions: "Acciones",
+    noAnnouncements: "No hay anuncios.",
   },
 };
-
-function translationKey(
-  type: "message" | "announcement",
-  id: number,
-  sourceLanguage: string,
-  targetLanguage: string,
-  content: string
-) {
-  return [
-    type,
-    id,
-    sourceLanguage,
-    targetLanguage,
-    content,
-  ].join("::");
-}
 
 export default function RoomPage() {
   const router = useRouter();
   const params = useParams();
 
-  const roomId = String(
-    params.id || ""
+  const rawId = params?.id;
+
+  const roomId = Array.isArray(rawId)
+    ? rawId[0]
+    : String(rawId || "");
+
+  const supabase = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !key) {
+      return null;
+    }
+
+    return createClient(url, key);
+  }, []);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const [splash, setSplash] = useState(true);
+
+  const [senderId, setSenderId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [language, setLanguage] = useState("en");
+
+  const [needsLanguage, setNeedsLanguage] = useState(false);
+  const [needsName, setNeedsName] = useState(false);
+
+  const [roomLoading, setRoomLoading] = useState(true);
+  const [roomEnded, setRoomEnded] = useState(false);
+  const [ownerId, setOwnerId] = useState("");
+
+  /*
+   * 이벤트에 속한 방인지 확인하기 위한 값.
+   *
+   * event_id가 있으면:
+   * 방 나가기 -> /event/{event_id}
+   *
+   * event_id가 없으면:
+   * 방 나가기 -> /
+   */
+  const [roomEventId, setRoomEventId] = useState<string | null>(
+    null
   );
 
-  const [splash, setSplash] =
-    useState(true);
-
-  const [
-    languageChecked,
-    setLanguageChecked,
-  ] = useState(false);
-
-  const [
-    firstLanguageChoice,
-    setFirstLanguageChoice,
-  ] = useState(false);
-
-  const [
-    showLanguage,
-    setShowLanguage,
-  ] = useState(false);
-
-  const [language, setLanguage] =
-    useState("en");
-
-  const [
-    senderId,
-    setSenderId,
-  ] = useState("");
-
-  const [
-    displayName,
-    setDisplayName,
-  ] = useState("");
-
-  const [
-    nameInput,
-    setNameInput,
-  ] = useState("");
-
-  const [
-    showNameSetup,
-    setShowNameSetup,
-  ] = useState(false);
-
-  const [
-    roomLoading,
-    setRoomLoading,
-  ] = useState(true);
-
-  const [
-    ownerId,
-    setOwnerId,
-  ] = useState("");
-
-  const [
-    onlineParticipants,
-    setOnlineParticipants,
-  ] = useState<
-    OnlineParticipant[]
-  >([]);
-
-  const [
-    participantDirectory,
-    setParticipantDirectory,
-  ] = useState<
-    ParticipantRecord[]
-  >([]);
-
-  const [
-    showParticipants,
-    setShowParticipants,
-  ] = useState(false);
-
-  const [
-    showRoomMenu,
-    setShowRoomMenu,
-  ] = useState(false);
-
-  const [
-    showActions,
-    setShowActions,
-  ] = useState(false);
-
-  const [
-    messages,
-    setMessages,
-  ] = useState<Message[]>([]);
-
-  const [
-    message,
-    setMessage,
-  ] = useState("");
-
-  const [
-    sending,
-    setSending,
-  ] = useState(false);
-
-  const [
-    announcements,
-    setAnnouncements,
-  ] = useState<
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [announcements, setAnnouncements] = useState<
     Announcement[]
   >([]);
 
-  const [
-    readCounts,
-    setReadCounts,
-  ] = useState<ReadCount>({});
+  const [onlineParticipants, setOnlineParticipants] = useState<
+    Participant[]
+  >([]);
 
-  const [
-    announcementText,
-    setAnnouncementText,
-  ] = useState("");
+  const [participantDirectory, setParticipantDirectory] = useState<
+    Participant[]
+  >([]);
 
-  const [
-    announcementPriority,
-    setAnnouncementPriority,
-  ] = useState<Priority>(
-    "normal"
-  );
+  const [readCounts, setReadCounts] = useState<
+    Record<number, number>
+  >({});
 
-  const [
-    editingAnnouncement,
-    setEditingAnnouncement,
-  ] = useState<
-    Announcement | null
-  >(null);
+  const [messageInput, setMessageInput] = useState("");
 
-  const [
-    deletingAnnouncement,
-    setDeletingAnnouncement,
-  ] = useState<
-    Announcement | null
-  >(null);
-
-  const [
-    showAnnouncementWriter,
-    setShowAnnouncementWriter,
-  ] = useState(false);
-
-  const [
-    showAnnouncementList,
-    setShowAnnouncementList,
-  ] = useState(false);
-
-  const [
-    publishingAnnouncement,
-    setPublishingAnnouncement,
-  ] = useState(false);
-
-  const [
-    showQR,
-    setShowQR,
-  ] = useState(false);
-
-  const [
-    roomUrl,
-    setRoomUrl,
-  ] = useState("");
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState("");
-
-  const [
-    translations,
-    setTranslations,
-  ] = useState<
-    Record<string, string>
+  const [translatedMessages, setTranslatedMessages] = useState<
+    Record<number, string>
   >({});
 
   const [
-    originalMode,
-    setOriginalMode,
-  ] = useState<
-    Record<string, boolean>
+    translatedAnnouncements,
+    setTranslatedAnnouncements,
+  ] = useState<Record<number, string>>({});
+
+  const [originalMessages, setOriginalMessages] = useState<
+    Record<number, boolean>
   >({});
 
-  const translationCacheRef =
-    useRef<
-      Record<string, string>
-    >({});
+  const [
+    originalAnnouncements,
+    setOriginalAnnouncements,
+  ] = useState<Record<number, boolean>>({});
 
-  const translationRequestsRef =
-    useRef<Set<string>>(
-      new Set()
-    );
+  const [showRoomMenu, setShowRoomMenu] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [showLanguage, setShowLanguage] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const [showAnnouncements, setShowAnnouncements] =
+    useState(false);
+  const [showActions, setShowActions] = useState(false);
+  const [showNameEdit, setShowNameEdit] = useState(false);
 
-  const bottomRef =
-    useRef<HTMLDivElement>(
-      null
-    );
+  const [showLeaveConfirm, setShowLeaveConfirm] =
+    useState(false);
 
-  const isOwner =
-    Boolean(senderId) &&
-    Boolean(ownerId) &&
-    senderId === ownerId;
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
 
-  const t =
-    copy[language] ||
-    copy.en;
+  const [nameDraft, setNameDraft] = useState("");
 
-  // =================================
-  // DEVICE
-  // =================================
+  const [showWriter, setShowWriter] = useState(false);
+
+  const [editingAnnouncement, setEditingAnnouncement] =
+    useState<Announcement | null>(null);
+
+  const [announcementDraft, setAnnouncementDraft] =
+    useState("");
+
+  const [priorityDraft, setPriorityDraft] = useState<
+    "normal" | "important" | "urgent"
+  >("normal");
+
+  const [deletingAnnouncement, setDeletingAnnouncement] =
+    useState<Announcement | null>(null);
+
+  const t = copy[language] || copy.en;
+
+  const isOwner = !!senderId && senderId === ownerId;
+
+  const latestAnnouncement = announcements[0] || null;
+
+  const roomUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/room/${roomId}`
+      : "";
+
+  const exitButtonText = roomEventId
+    ? t.backToEvent
+    : t.goHome;
+
+  const leaveDescription = roomEventId
+    ? t.leaveEventDescription
+    : t.leaveDescription;
+
+  // -------------------------------------
+  // LOCAL PROFILE
+  // -------------------------------------
 
   useEffect(() => {
-    setRoomUrl(
-      window.location.href
-    );
+    const savedLanguage = localStorage.getItem("wyd_language");
+    const savedName = localStorage.getItem("wyd_display_name");
 
-    let id =
-      localStorage.getItem(
-        "wyd_sender_id"
-      );
+    let savedSenderId = localStorage.getItem("wyd_sender_id");
 
-    if (!id) {
-      id =
-        crypto.randomUUID();
+    if (!savedSenderId) {
+      savedSenderId = crypto.randomUUID();
 
-      localStorage.setItem(
-        "wyd_sender_id",
-        id
-      );
+      localStorage.setItem("wyd_sender_id", savedSenderId);
     }
 
-    setSenderId(id);
-
-    const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
+    setSenderId(savedSenderId);
 
     if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
-
-      document.documentElement.lang =
-        savedLanguage;
+      setLanguage(savedLanguage);
+      setNeedsLanguage(false);
     } else {
-      setFirstLanguageChoice(
-        true
-      );
+      setNeedsLanguage(true);
     }
-
-    const savedName =
-      localStorage.getItem(
-        "wyd_display_name"
-      );
 
     if (savedName) {
-      setDisplayName(
-        savedName
-      );
-
-      setNameInput(
-        savedName
-      );
+      setDisplayName(savedName);
+      setNameDraft(savedName);
+      setNeedsName(false);
     } else {
-      setShowNameSetup(
-        true
-      );
+      setNeedsName(true);
     }
 
-    setLanguageChecked(
-      true
-    );
+    const timer = setTimeout(() => {
+      setSplash(false);
+    }, 900);
 
-    const timer =
-      setTimeout(() => {
-        setSplash(false);
-      }, 1400);
-
-    return () =>
-      clearTimeout(timer);
+    return () => clearTimeout(timer);
   }, []);
 
-  // =================================
-  // NAME
-  // =================================
-
-  function saveName() {
-    const name =
-      nameInput.trim();
-
-    if (!name) return;
-
-    const finalName =
-      name.slice(0, 30);
-
-    localStorage.setItem(
-      "wyd_display_name",
-      finalName
-    );
-
-    setDisplayName(
-      finalName
-    );
-
-    setNameInput(
-      finalName
-    );
-
-    setShowNameSetup(
-      false
-    );
-  }
-
-  // =================================
-  // ROOM DATA
-  // =================================
+  // -------------------------------------
+  // ROOM + REALTIME + FALLBACK SYNC
+  // -------------------------------------
 
   useEffect(() => {
-    if (!roomId) return;
-    if (!senderId) return;
-    if (!displayName) return;
+    if (
+      !supabase ||
+      !roomId ||
+      !senderId ||
+      !displayName ||
+      !language ||
+      needsLanguage ||
+      needsName
+    ) {
+      return;
+    }
 
-    async function startRoom() {
+    let active = true;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    let syncTimer: ReturnType<typeof setInterval> | null = null;
+
+    function mergeMessage(incoming: Message) {
+      setMessages((current) => {
+        if (
+          current.some(
+            (message) => message.id === incoming.id
+          )
+        ) {
+          return current;
+        }
+
+        return [...current, incoming].sort((a, b) =>
+          a.created_at.localeCompare(b.created_at)
+        );
+      });
+    }
+
+    function mergeAnnouncement(incoming: Announcement) {
+      setAnnouncements((current) => {
+        const next = [
+          incoming,
+          ...current.filter(
+            (item) => item.id !== incoming.id
+          ),
+        ];
+
+        return next.sort((a, b) =>
+          b.created_at.localeCompare(a.created_at)
+        );
+      });
+    }
+
+    async function refreshMessages() {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("room_id", roomId)
+        .order("created_at", {
+          ascending: true,
+        });
+
+      if (!active || error || !data) {
+        return;
+      }
+
+      setMessages(data as Message[]);
+    }
+
+    async function refreshAnnouncements() {
+      const { data, error } = await supabase
+        .from("announcements")
+        .select("*")
+        .eq("room_id", roomId)
+        .order("created_at", {
+          ascending: false,
+        });
+
+      if (!active || error || !data) {
+        return;
+      }
+
+      setAnnouncements(data as Announcement[]);
+    }
+
+    async function refreshParticipants() {
+      const { data, error } = await supabase
+        .from("room_participants")
+        .select("user_id,display_name,language")
+        .eq("room_id", roomId);
+
+      if (!active || error || !data) {
+        return;
+      }
+
+      setParticipantDirectory(data as Participant[]);
+    }
+
+    async function refreshReadCounts() {
+      const { data, error } = await supabase
+        .from("announcement_reads")
+        .select("announcement_id,user_id")
+        .eq("room_id", roomId);
+
+      if (!active || error || !data) {
+        return;
+      }
+
+      const map = new Map<number, Set<string>>();
+
+      for (const row of data) {
+        const id = Number(row.announcement_id);
+
+        if (!map.has(id)) {
+          map.set(id, new Set());
+        }
+
+        map.get(id)?.add(row.user_id);
+      }
+
+      const next: Record<number, number> = {};
+
+      map.forEach((users, id) => {
+        next[id] = users.size;
+      });
+
+      setReadCounts(next);
+    }
+
+    async function refreshRoomStatus() {
+      const { data } = await supabase
+        .from("rooms")
+        .select("id,owner_id,status,event_id")
+        .eq("id", roomId)
+        .maybeSingle();
+
+      if (!active || !data) {
+        return;
+      }
+
+      if (data.owner_id) {
+        setOwnerId(data.owner_id);
+      }
+
+      if (data.event_id) {
+        setRoomEventId(data.event_id);
+      } else {
+        setRoomEventId(null);
+      }
+
+      if (data.status === "ended") {
+        setRoomEnded(true);
+      }
+    }
+
+    function syncPresence() {
+      if (!channel) {
+        return;
+      }
+
+      const state = channel.presenceState() as Record<
+        string,
+        Array<{
+          user_id?: string;
+          display_name?: string;
+          language?: string;
+        }>
+      >;
+
+      const people = new Map<string, Participant>();
+
+      Object.values(state)
+        .flat()
+        .forEach((presence) => {
+          if (!presence.user_id) {
+            return;
+          }
+
+          people.set(presence.user_id, {
+            user_id: presence.user_id,
+            display_name: presence.display_name || "Guest",
+            language: presence.language || "en",
+          });
+        });
+
+      setOnlineParticipants(Array.from(people.values()));
+    }
+
+    async function initialize() {
       setRoomLoading(true);
-      setErrorMessage("");
 
       const {
         data: existingRoom,
         error: roomError,
       } = await supabase
         .from("rooms")
-        .select(
-          "id, owner_id"
-        )
-        .eq(
-          "id",
-          roomId
-        )
+        .select("id,owner_id,status,event_id")
+        .eq("id", roomId)
         .maybeSingle();
 
       if (roomError) {
-        setErrorMessage(
-          roomError.message
-        );
+        console.error("Room load error:", roomError);
       }
 
-      let currentOwner =
-        existingRoom?.owner_id ||
-        "";
+      if (existingRoom?.event_id) {
+        setRoomEventId(existingRoom.event_id);
+      } else {
+        setRoomEventId(null);
+      }
+
+      if (existingRoom?.status === "ended") {
+        setOwnerId(existingRoom.owner_id || "");
+        setRoomEnded(true);
+        setRoomLoading(false);
+
+        return;
+      }
+
+      let resolvedOwner = existingRoom?.owner_id || "";
 
       if (!existingRoom) {
         const {
-          data: createdRoom,
-          error,
+          data: created,
+          error: createError,
         } = await supabase
           .from("rooms")
           .insert({
             id: roomId,
-            owner_id:
-              senderId,
+            owner_id: senderId,
+            status: "active",
           })
-          .select(
-            "id, owner_id"
-          )
+          .select("id,owner_id,status,event_id")
           .single();
 
-        if (error) {
-          setErrorMessage(
-            error.message
-          );
+        if (createError) {
+          console.error("Room create error:", createError);
         }
 
-        if (createdRoom) {
-          currentOwner =
-            createdRoom.owner_id;
-        }
-      }
+        resolvedOwner = created?.owner_id || senderId;
 
-      if (
-        existingRoom &&
-        !existingRoom.owner_id
-      ) {
-        const {
-          data: updatedRoom,
-        } = await supabase
+        if (created?.event_id) {
+          setRoomEventId(created.event_id);
+        }
+      } else if (!existingRoom.owner_id) {
+        await supabase
           .from("rooms")
           .update({
-            owner_id:
-              senderId,
+            owner_id: senderId,
           })
-          .eq(
-            "id",
-            roomId
-          )
-          .select(
-            "id, owner_id"
-          )
-          .single();
+          .eq("id", roomId);
 
-        if (updatedRoom) {
-          currentOwner =
-            updatedRoom.owner_id;
-        }
+        resolvedOwner = senderId;
       }
 
-      setOwnerId(
-        currentOwner
-      );
+      if (!active) {
+        return;
+      }
 
-      const {
-        error: participantError,
-      } = await supabase
-        .from(
-          "room_participants"
-        )
+      setOwnerId(resolvedOwner);
+
+      const { error: participantError } = await supabase
+        .from("room_participants")
         .upsert(
           {
-            room_id:
-              roomId,
-
-            user_id:
-              senderId,
-
-            display_name:
-              displayName,
-
+            room_id: roomId,
+            user_id: senderId,
+            display_name: displayName,
             language,
-
-            updated_at:
-              new Date()
-                .toISOString(),
+            updated_at: new Date().toISOString(),
           },
           {
-            onConflict:
-              "room_id,user_id",
+            onConflict: "room_id,user_id",
           }
         );
 
-      if (
-        participantError
-      ) {
-        setErrorMessage(
-          participantError.message
+      if (participantError) {
+        console.error(
+          "Participant save error:",
+          participantError
         );
       }
 
-      const {
-        data: participantData,
-      } = await supabase
-        .from(
-          "room_participants"
-        )
-        .select(
-          "user_id, display_name, language"
-        )
-        .eq(
-          "room_id",
-          roomId
-        );
+      await Promise.all([
+        refreshMessages(),
+        refreshAnnouncements(),
+        refreshParticipants(),
+        refreshReadCounts(),
+      ]);
 
-      if (participantData) {
-        setParticipantDirectory(
-          participantData as ParticipantRecord[]
-        );
+      if (!active) {
+        return;
       }
 
-      const {
-        data: messageData,
-        error: messageError,
-      } = await supabase
-        .from("messages")
-        .select("*")
-        .eq(
-          "room_id",
-          roomId
-        )
-        .order(
-          "created_at",
-          {
-            ascending: true,
-          }
-        );
-
-      if (messageError) {
-        setErrorMessage(
-          messageError.message
-        );
-      }
-
-      if (messageData) {
-        setMessages(
-          messageData as Message[]
-        );
-      }
-
-      const {
-        data:
-          announcementData,
-        error:
-          announcementError,
-      } = await supabase
-        .from(
-          "announcements"
-        )
-        .select("*")
-        .eq(
-          "room_id",
-          roomId
-        )
-        .order(
-          "created_at",
-          {
-            ascending: false,
-          }
-        );
-
-      if (
-        announcementError
-      ) {
-        setErrorMessage(
-          announcementError.message
-        );
-      }
-
-      if (
-        announcementData
-      ) {
-        setAnnouncements(
-          announcementData as Announcement[]
-        );
-      }
-
-      const {
-        data: readData,
-      } = await supabase
-        .from(
-          "announcement_reads"
-        )
-        .select(
-          "announcement_id"
-        )
-        .eq(
-          "room_id",
-          roomId
-        );
-
-      if (readData) {
-        const counts:
-          ReadCount = {};
-
-        readData.forEach(
-          (item) => {
-            const id =
-              Number(
-                item.announcement_id
-              );
-
-            counts[id] =
-              (counts[id] || 0) +
-              1;
-          }
-        );
-
-        setReadCounts(
-          counts
-        );
-      }
-
-      setRoomLoading(
-        false
-      );
-    }
-
-    startRoom();
-  }, [
-    roomId,
-    senderId,
-    displayName,
-    language,
-  ]);
-
-  // =================================
-  // REALTIME + PRESENCE
-  // =================================
-
-  useEffect(() => {
-    if (!roomId) return;
-    if (!senderId) return;
-    if (!displayName) return;
-
-    const channel =
-      supabase.channel(
-        `wyd-room-${roomId}`,
-        {
-          config: {
-            presence: {
-              key:
-                senderId,
-            },
+      channel = supabase.channel(`wyd-room-${roomId}`, {
+        config: {
+          presence: {
+            key: senderId,
           },
-        }
-      );
+        },
+      });
 
-    function syncPresence() {
-      const state =
-        channel.presenceState();
+      channel
+        .on(
+          "presence",
+          {
+            event: "sync",
+          },
+          syncPresence
+        )
+        .on(
+          "presence",
+          {
+            event: "join",
+          },
+          syncPresence
+        )
+        .on(
+          "presence",
+          {
+            event: "leave",
+          },
+          syncPresence
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `room_id=eq.${roomId}`,
+          },
+          (payload) => {
+            mergeMessage(payload.new as Message);
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "announcements",
+            filter: `room_id=eq.${roomId}`,
+          },
+          (payload) => {
+            mergeAnnouncement(payload.new as Announcement);
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "announcements",
+            filter: `room_id=eq.${roomId}`,
+          },
+          (payload) => {
+            mergeAnnouncement(payload.new as Announcement);
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "announcements",
+          },
+          (payload) => {
+            const deletedId = Number(
+              (payload.old as any)?.id
+            );
 
-      const users:
-        OnlineParticipant[] =
-        [];
+            setAnnouncements((current) =>
+              current.filter(
+                (item) => item.id !== deletedId
+              )
+            );
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "announcement_reads",
+            filter: `room_id=eq.${roomId}`,
+          },
+          () => {
+            refreshReadCounts();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "rooms",
+            filter: `id=eq.${roomId}`,
+          },
+          (payload) => {
+            const room = payload.new as {
+              status?: string;
+              owner_id?: string;
+              event_id?: string | null;
+            };
 
-      Object.values(
-        state
-      ).forEach(
-        (entries: any) => {
-          entries.forEach(
-            (entry: any) => {
-              if (
-                !entry.user_id
-              ) {
-                return;
-              }
-
-              if (
-                users.some(
-                  (user) =>
-                    user.user_id ===
-                    entry.user_id
-                )
-              ) {
-                return;
-              }
-
-              users.push({
-                user_id:
-                  entry.user_id,
-
-                name:
-                  entry.name ||
-                  "Guest",
-
-                language:
-                  entry.language ||
-                  "en",
-              });
+            if (room.owner_id) {
+              setOwnerId(room.owner_id);
             }
-          );
-        }
-      );
 
-      setOnlineParticipants(
-        users
-      );
+            if (room.event_id) {
+              setRoomEventId(room.event_id);
+            } else {
+              setRoomEventId(null);
+            }
+
+            if (room.status === "ended") {
+              setRoomEnded(true);
+
+              setShowRoomMenu(false);
+              setShowParticipants(false);
+              setShowQR(false);
+              setShowLanguage(false);
+              setShowAnnouncements(false);
+              setShowActions(false);
+              setShowWriter(false);
+              setShowLeaveConfirm(false);
+              setShowEndConfirm(false);
+            }
+          }
+        )
+        .subscribe(async (status) => {
+          console.log("WYD realtime:", status);
+
+          if (status === "SUBSCRIBED") {
+            await channel?.track({
+              user_id: senderId,
+              display_name: displayName,
+              language,
+              online_at: new Date().toISOString(),
+            });
+          }
+        });
+
+      syncTimer = setInterval(() => {
+        refreshMessages();
+        refreshAnnouncements();
+        refreshParticipants();
+        refreshReadCounts();
+        refreshRoomStatus();
+      }, 3000);
+
+      setRoomLoading(false);
     }
 
-    channel.on(
-      "presence",
-      {
-        event: "sync",
-      },
-      syncPresence
-    );
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "messages",
-        filter:
-          `room_id=eq.${roomId}`,
-      },
-      (payload) => {
-        const item =
-          payload.new as Message;
-
-        setMessages(
-          (current) => {
-            if (
-              current.some(
-                (message) =>
-                  message.id ===
-                  item.id
-              )
-            ) {
-              return current;
-            }
-
-            return [
-              ...current,
-              item,
-            ];
-          }
-        );
-      }
-    );
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table:
-          "announcements",
-        filter:
-          `room_id=eq.${roomId}`,
-      },
-      (payload) => {
-        const item =
-          payload.new as Announcement;
-
-        setAnnouncements(
-          (current) => {
-            if (
-              current.some(
-                (announcement) =>
-                  announcement.id ===
-                  item.id
-              )
-            ) {
-              return current;
-            }
-
-            return [
-              item,
-              ...current,
-            ];
-          }
-        );
-      }
-    );
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table:
-          "announcements",
-        filter:
-          `room_id=eq.${roomId}`,
-      },
-      (payload) => {
-        const item =
-          payload.new as Announcement;
-
-        setAnnouncements(
-          (current) =>
-            current.map(
-              (announcement) =>
-                announcement.id ===
-                item.id
-                  ? item
-                  : announcement
-            )
-        );
-      }
-    );
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "DELETE",
-        schema: "public",
-        table:
-          "announcements",
-      },
-      (payload) => {
-        const deleted =
-          payload.old as {
-            id?: number;
-          };
-
-        if (!deleted.id) {
-          return;
-        }
-
-        setAnnouncements(
-          (current) =>
-            current.filter(
-              (announcement) =>
-                announcement.id !==
-                deleted.id
-            )
-        );
-      }
-    );
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table:
-          "announcement_reads",
-        filter:
-          `room_id=eq.${roomId}`,
-      },
-      (payload) => {
-        const id =
-          Number(
-            payload.new
-              .announcement_id
-          );
-
-        setReadCounts(
-          (current) => ({
-            ...current,
-
-            [id]:
-              (current[id] || 0) +
-              1,
-          })
-        );
-      }
-    );
-
-    channel.subscribe(
-      async (status) => {
-        if (
-          status ===
-          "SUBSCRIBED"
-        ) {
-          await channel.track({
-            user_id:
-              senderId,
-
-            name:
-              displayName,
-
-            language,
-
-            online_at:
-              new Date()
-                .toISOString(),
-          });
-        }
-      }
-    );
+    initialize();
 
     return () => {
-      supabase.removeChannel(
-        channel
-      );
+      active = false;
+
+      if (syncTimer) {
+        clearInterval(syncTimer);
+      }
+
+      if (channel) {
+        channel.untrack().catch(() => {});
+        supabase.removeChannel(channel);
+      }
     };
   }, [
+    supabase,
     roomId,
     senderId,
     displayName,
     language,
+    needsLanguage,
+    needsName,
   ]);
 
-  // =================================
-  // TRANSLATION
-  // =================================
+  // -------------------------------------
+  // SCROLL
+  // -------------------------------------
 
   useEffect(() => {
-    let cancelled =
-      false;
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages]);
 
-    async function requestTranslation(
-      type:
-        | "message"
-        | "announcement",
-      id: number,
-      content: string,
-      sourceLanguage: string
-    ) {
-      if (
-        !sourceLanguage ||
-        sourceLanguage ===
-          language
-      ) {
-        return;
-      }
+  // -------------------------------------
+  // MESSAGE TRANSLATION
+  // -------------------------------------
 
-      const key =
-        translationKey(
-          type,
-          id,
-          sourceLanguage,
-          language,
-          content
-        );
+  useEffect(() => {
+    let cancelled = false;
 
-      if (
-        translationCacheRef
-          .current[key]
-      ) {
-        return;
-      }
-
-      if (
-        translationRequestsRef
-          .current.has(key)
-      ) {
-        return;
-      }
-
-      translationRequestsRef.current.add(
-        key
-      );
-
-      try {
-        const response =
-          await fetch(
-            "/api/translate",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  text:
-                    content,
-
-                  source:
-                    sourceLanguage,
-
-                  target:
-                    language,
-                }),
-            }
-          );
-
-        const raw =
-          await response.text();
-
-        let data: any;
+    async function translateMessages() {
+      for (const message of messages) {
+        if (
+          cancelled ||
+          roomEnded ||
+          !message.content ||
+          message.source_language === language ||
+          translatedMessages[message.id]
+        ) {
+          continue;
+        }
 
         try {
-          data =
-            JSON.parse(raw);
-        } catch {
-          console.error(
-            "Translation returned non-JSON:",
-            raw
-          );
+          const response = await fetch("/api/translate", {
+            method: "POST",
 
-          return;
-        }
+            headers: {
+              "Content-Type": "application/json",
+            },
 
-        if (
-          !response.ok ||
-          !data.translatedText
-        ) {
-          console.error(
-            "Translation failed:",
-            data
-          );
+            body: JSON.stringify({
+              text: message.content,
+              sourceLanguage: message.source_language,
+              targetLanguage: language,
+            }),
+          });
 
-          return;
-        }
+          const raw = await response.text();
 
-        if (cancelled) {
-          return;
-        }
+          if (!response.ok || !raw) {
+            continue;
+          }
 
-        translationCacheRef.current[
-          key
-        ] =
-          data.translatedText;
+          const data = JSON.parse(raw);
 
-        setTranslations(
-          (current) => ({
+          if (cancelled || !data?.translatedText) {
+            continue;
+          }
+
+          setTranslatedMessages((current) => ({
             ...current,
-
-            [key]:
-              data.translatedText,
-          })
-        );
-      } catch (error) {
-        console.error(
-          "Translation error:",
-          error
-        );
-      } finally {
-        translationRequestsRef.current.delete(
-          key
-        );
+            [message.id]: data.translatedText,
+          }));
+        } catch (error) {
+          console.error(
+            "Message translation error:",
+            error
+          );
+        }
       }
     }
 
-    async function translateEverything() {
-      for (
-        const item of messages
-      ) {
-        if (cancelled) return;
-
-        await requestTranslation(
-          "message",
-          item.id,
-          item.content,
-          item.source_language
-        );
-      }
-
-      for (
-        const item of announcements
-      ) {
-        if (cancelled) return;
-
-        await requestTranslation(
-          "announcement",
-          item.id,
-          item.content,
-          item.source_language
-        );
-      }
-    }
-
-    translateEverything();
+    translateMessages();
 
     return () => {
       cancelled = true;
     };
   }, [
     messages,
-    announcements,
     language,
+    translatedMessages,
+    roomEnded,
   ]);
 
-  function getTranslationKey(
-    type:
-      | "message"
-      | "announcement",
-    id: number,
-    content: string,
-    sourceLanguage: string
-  ) {
-    return translationKey(
-      type,
-      id,
-      sourceLanguage,
-      language,
-      content
-    );
-  }
-
-  function translatedText(
-    type:
-      | "message"
-      | "announcement",
-    id: number,
-    content: string,
-    sourceLanguage: string
-  ) {
-    if (
-      !sourceLanguage ||
-      sourceLanguage ===
-        language
-    ) {
-      return content;
-    }
-
-    const key =
-      getTranslationKey(
-        type,
-        id,
-        content,
-        sourceLanguage
-      );
-
-    if (
-      originalMode[key]
-    ) {
-      return content;
-    }
-
-    return (
-      translations[key] ||
-      content
-    );
-  }
-
-  function hasTranslation(
-    type:
-      | "message"
-      | "announcement",
-    id: number,
-    content: string,
-    sourceLanguage: string
-  ) {
-    if (
-      !sourceLanguage ||
-      sourceLanguage ===
-        language
-    ) {
-      return false;
-    }
-
-    const key =
-      getTranslationKey(
-        type,
-        id,
-        content,
-        sourceLanguage
-      );
-
-    return Boolean(
-      translations[key]
-    );
-  }
-
-  function isShowingOriginal(
-    type:
-      | "message"
-      | "announcement",
-    id: number,
-    content: string,
-    sourceLanguage: string
-  ) {
-    const key =
-      getTranslationKey(
-        type,
-        id,
-        content,
-        sourceLanguage
-      );
-
-    return Boolean(
-      originalMode[key]
-    );
-  }
-
-  function toggleOriginal(
-    type:
-      | "message"
-      | "announcement",
-    id: number,
-    content: string,
-    sourceLanguage: string
-  ) {
-    const key =
-      getTranslationKey(
-        type,
-        id,
-        content,
-        sourceLanguage
-      );
-
-    setOriginalMode(
-      (current) => ({
-        ...current,
-
-        [key]:
-          !current[key],
-      })
-    );
-  }
-
-  function languageName(
-    code: string
-  ) {
-    return (
-      languages.find(
-        (item) =>
-          item.code === code
-      )?.name || code
-    );
-  }
-
-  // =================================
-  // MESSAGE SCROLL
-  // =================================
+  // -------------------------------------
+  // ANNOUNCEMENT TRANSLATION
+  // -------------------------------------
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView(
-      {
-        behavior: "smooth",
-      }
-    );
-  }, [messages]);
+    let cancelled = false;
 
-  // =================================
-  // READ
-  // =================================
-
-  async function markAsRead(
-    announcementId: number
-  ) {
-    if (!senderId) return;
-
-    await supabase
-      .from(
-        "announcement_reads"
-      )
-      .upsert(
-        {
-          announcement_id:
-            announcementId,
-
-          room_id:
-            roomId,
-
-          user_id:
-            senderId,
-        },
-        {
-          onConflict:
-            "announcement_id,user_id",
-
-          ignoreDuplicates:
-            true,
+    async function translateAnnouncements() {
+      for (const announcement of announcements) {
+        if (
+          cancelled ||
+          roomEnded ||
+          !announcement.content ||
+          announcement.source_language === language ||
+          translatedAnnouncements[announcement.id]
+        ) {
+          continue;
         }
-      );
-  }
 
-  async function openAnnouncements() {
-    setShowAnnouncementList(
-      true
-    );
+        try {
+          const response = await fetch("/api/translate", {
+            method: "POST",
 
-    setShowRoomMenu(
-      false
-    );
+            headers: {
+              "Content-Type": "application/json",
+            },
 
-    for (
-      const announcement of announcements
-    ) {
-      await markAsRead(
-        announcement.id
-      );
+            body: JSON.stringify({
+              text: announcement.content,
+              sourceLanguage: announcement.source_language,
+              targetLanguage: language,
+            }),
+          });
+
+          const raw = await response.text();
+
+          if (!response.ok || !raw) {
+            continue;
+          }
+
+          const data = JSON.parse(raw);
+
+          if (cancelled || !data?.translatedText) {
+            continue;
+          }
+
+          setTranslatedAnnouncements((current) => ({
+            ...current,
+            [announcement.id]: data.translatedText,
+          }));
+        } catch (error) {
+          console.error(
+            "Announcement translation error:",
+            error
+          );
+        }
+      }
     }
-  }
 
-  // =================================
-  // SEND MESSAGE
-  // =================================
+    translateAnnouncements();
 
-  async function sendMessage() {
-    const text =
-      message.trim();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    announcements,
+    language,
+    translatedAnnouncements,
+    roomEnded,
+  ]);
 
+  // -------------------------------------
+  // ANNOUNCEMENT READ
+  // -------------------------------------
+
+  useEffect(() => {
     if (
-      !text ||
-      sending ||
-      !senderId
+      !supabase ||
+      !senderId ||
+      !roomId ||
+      roomEnded ||
+      announcements.length === 0
     ) {
       return;
     }
 
-    setSending(true);
-    setErrorMessage("");
+    async function markRead() {
+      for (const announcement of announcements) {
+        const { error } = await supabase!
+          .from("announcement_reads")
+          .insert({
+            announcement_id: announcement.id,
+            room_id: roomId,
+            user_id: senderId,
+          });
 
-    const {
-      data,
-      error,
-    } = await supabase
+        if (error && error.code !== "23505") {
+          console.error("Read receipt error:", error);
+        }
+      }
+    }
+
+    markRead();
+  }, [
+    supabase,
+    announcements,
+    senderId,
+    roomId,
+    roomEnded,
+  ]);
+
+  // -------------------------------------
+  // SEND MESSAGE
+  // -------------------------------------
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault();
+
+    const content = messageInput.trim();
+
+    if (!supabase || !content || roomEnded) {
+      return;
+    }
+
+    setMessageInput("");
+
+    const { data, error } = await supabase
       .from("messages")
       .insert({
-        room_id:
-          roomId,
-
-        sender_id:
-          senderId,
-
-        content:
-          text,
-
-        source_language:
-          language,
+        room_id: roomId,
+        sender_id: senderId,
+        content,
+        source_language: language,
       })
-      .select()
+      .select("*")
       .single();
 
     if (error) {
-      setErrorMessage(
-        error.message
-      );
+      console.error("Send message error:", error);
 
-      setSending(false);
-
+      setMessageInput(content);
       return;
     }
 
-    setMessage("");
-
     if (data) {
-      const item =
-        data as Message;
+      const savedMessage = data as Message;
 
-      setMessages(
-        (current) => {
-          if (
-            current.some(
-              (message) =>
-                message.id ===
-                item.id
-            )
-          ) {
-            return current;
-          }
-
-          return [
-            ...current,
-            item,
-          ];
+      setMessages((current) => {
+        if (
+          current.some(
+            (message) => message.id === savedMessage.id
+          )
+        ) {
+          return current;
         }
-      );
-    }
 
-    setSending(false);
+        return [...current, savedMessage].sort((a, b) =>
+          a.created_at.localeCompare(b.created_at)
+        );
+      });
+    }
   }
 
-  // =================================
-  // ANNOUNCEMENT
-  // =================================
+  // -------------------------------------
+  // EXIT / LEAVE / END
+  // -------------------------------------
 
-  function newAnnouncement() {
-    setEditingAnnouncement(
-      null
-    );
+  function returnFromRoom() {
+    if (roomEventId) {
+      router.replace(`/event/${roomEventId}`);
+      return;
+    }
 
-    setAnnouncementText(
-      ""
-    );
+    router.replace("/");
+  }
 
-    setAnnouncementPriority(
-      "normal"
-    );
+  function leaveRoom() {
+    setShowLeaveConfirm(false);
+    returnFromRoom();
+  }
+
+  async function endRoom() {
+    if (!supabase || !isOwner) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("rooms")
+      .update({
+        status: "ended",
+        ended_at: new Date().toISOString(),
+      })
+      .eq("id", roomId)
+      .eq("owner_id", senderId);
+
+    if (error) {
+      console.error("End room error:", error);
+      return;
+    }
+
+    setShowEndConfirm(false);
+    setRoomEnded(true);
+  }
+
+  // -------------------------------------
+  // NAME
+  // -------------------------------------
+
+  function saveFirstName(name: string) {
+    const clean = name.trim();
+
+    if (!clean) {
+      return;
+    }
+
+    localStorage.setItem("wyd_display_name", clean);
+
+    setDisplayName(clean);
+    setNameDraft(clean);
+    setNeedsName(false);
+  }
+
+  function saveEditedName() {
+    const clean = nameDraft.trim();
+
+    if (!clean) {
+      return;
+    }
+
+    localStorage.setItem("wyd_display_name", clean);
+
+    setDisplayName(clean);
+    setShowNameEdit(false);
+  }
+
+  // -------------------------------------
+  // LANGUAGE
+  // -------------------------------------
+
+  function chooseLanguage(code: string) {
+    localStorage.setItem("wyd_language", code);
+
+    document.documentElement.lang = code;
+
+    setLanguage(code);
+    setNeedsLanguage(false);
+    setShowLanguage(false);
+
+    setTranslatedMessages({});
+    setTranslatedAnnouncements({});
+  }
+
+  // -------------------------------------
+  // ANNOUNCEMENTS
+  // -------------------------------------
+
+  function openNewAnnouncement() {
+    setEditingAnnouncement(null);
+    setAnnouncementDraft("");
+    setPriorityDraft("normal");
 
     setShowActions(false);
     setShowRoomMenu(false);
 
-    setShowAnnouncementWriter(
-      true
-    );
+    setShowWriter(true);
   }
 
-  function editAnnouncement(
-    item: Announcement
+  function openEditAnnouncement(
+    announcement: Announcement
   ) {
-    if (!isOwner) return;
+    setEditingAnnouncement(announcement);
+    setAnnouncementDraft(announcement.content);
+    setPriorityDraft(announcement.priority);
 
-    setEditingAnnouncement(
-      item
-    );
-
-    setAnnouncementText(
-      item.content
-    );
-
-    setAnnouncementPriority(
-      item.priority ||
-        "normal"
-    );
-
-    setShowAnnouncementList(
-      false
-    );
-
-    setShowAnnouncementWriter(
-      true
-    );
+    setShowAnnouncements(false);
+    setShowWriter(true);
   }
 
   async function saveAnnouncement() {
-    const text =
-      announcementText.trim();
-
-    if (
-      !text ||
-      !isOwner ||
-      publishingAnnouncement
-    ) {
+    if (!supabase || !isOwner || roomEnded) {
       return;
     }
 
-    setPublishingAnnouncement(
-      true
-    );
+    const content = announcementDraft.trim();
 
-    setErrorMessage("");
+    if (!content) {
+      return;
+    }
 
-    if (
-      editingAnnouncement
-    ) {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from(
-          "announcements"
-        )
+    if (editingAnnouncement) {
+      const { error } = await supabase
+        .from("announcements")
         .update({
-          content:
-            text,
-
-          priority:
-            announcementPriority,
-
-          source_language:
-            language,
+          content,
+          priority: priorityDraft,
+          source_language: language,
         })
-        .eq(
-          "id",
-          editingAnnouncement.id
-        )
-        .eq(
-          "room_id",
-          roomId
-        )
-        .select()
-        .single();
+        .eq("id", editingAnnouncement.id);
 
       if (error) {
-        setErrorMessage(
-          error.message
+        console.error(
+          "Announcement update error:",
+          error
         );
-      }
 
-      if (data) {
-        const updated =
-          data as Announcement;
-
-        setAnnouncements(
-          (current) =>
-            current.map(
-              (item) =>
-                item.id ===
-                updated.id
-                  ? updated
-                  : item
-            )
-        );
+        return;
       }
     } else {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from(
-          "announcements"
-        )
+      const { data, error } = await supabase
+        .from("announcements")
         .insert({
-          room_id:
-            roomId,
-
-          author_id:
-            senderId,
-
-          content:
-            text,
-
-          priority:
-            announcementPriority,
-
-          source_language:
-            language,
+          room_id: roomId,
+          author_id: senderId,
+          content,
+          source_language: language,
+          priority: priorityDraft,
         })
-        .select()
+        .select("*")
         .single();
 
       if (error) {
-        setErrorMessage(
-          error.message
+        console.error(
+          "Announcement create error:",
+          error
         );
+
+        return;
       }
 
       if (data) {
-        const created =
-          data as Announcement;
-
-        setAnnouncements(
-          (current) => {
-            if (
-              current.some(
-                (item) =>
-                  item.id ===
-                  created.id
-              )
-            ) {
-              return current;
-            }
-
-            return [
-              created,
-              ...current,
-            ];
-          }
-        );
-
-        await markAsRead(
-          created.id
-        );
+        setAnnouncements((current) => [
+          data as Announcement,
+          ...current.filter(
+            (item) => item.id !== data.id
+          ),
+        ]);
       }
     }
 
-    setAnnouncementText(
-      ""
-    );
-
-    setEditingAnnouncement(
-      null
-    );
-
-    setShowAnnouncementWriter(
-      false
-    );
-
-    setPublishingAnnouncement(
-      false
-    );
+    setShowWriter(false);
+    setEditingAnnouncement(null);
+    setAnnouncementDraft("");
   }
 
   async function deleteAnnouncement() {
     if (
+      !supabase ||
       !deletingAnnouncement ||
-      !isOwner
+      !isOwner ||
+      roomEnded
     ) {
       return;
     }
 
-    const {
-      error,
-    } = await supabase
-      .from(
-        "announcements"
-      )
+    const deletingId = deletingAnnouncement.id;
+
+    const { error } = await supabase
+      .from("announcements")
       .delete()
-      .eq(
-        "id",
-        deletingAnnouncement.id
-      )
-      .eq(
-        "room_id",
-        roomId
-      );
+      .eq("id", deletingId);
 
     if (error) {
-      setErrorMessage(
-        error.message
+      console.error(
+        "Announcement delete error:",
+        error
       );
 
       return;
     }
 
-    setAnnouncements(
-      (current) =>
-        current.filter(
-          (item) =>
-            item.id !==
-            deletingAnnouncement.id
-        )
+    setAnnouncements((current) =>
+      current.filter(
+        (announcement) => announcement.id !== deletingId
+      )
     );
 
-    setDeletingAnnouncement(
-      null
-    );
+    setDeletingAnnouncement(null);
   }
 
-  // =================================
-  // LANGUAGE
-  // =================================
+  // -------------------------------------
+  // HELPERS
+  // -------------------------------------
 
-  function selectLanguage(
-    code: string
-  ) {
-    setLanguage(code);
+  function getSenderName(id: string) {
+    if (id === senderId) {
+      return displayName;
+    }
 
-    localStorage.setItem(
-      "wyd_language",
-      code
+    const online = onlineParticipants.find(
+      (participant) => participant.user_id === id
     );
 
-    document.documentElement.lang =
-      code;
+    if (online) {
+      return online.display_name;
+    }
 
-    setFirstLanguageChoice(
-      false
+    const stored = participantDirectory.find(
+      (participant) => participant.user_id === id
     );
 
-    setShowLanguage(
-      false
-    );
+    return stored?.display_name || "Guest";
   }
 
-  // =================================
-  // SPLASH
-  // =================================
+  function messageText(message: Message) {
+    if (
+      originalMessages[message.id] ||
+      message.source_language === language
+    ) {
+      return message.content;
+    }
 
-  if (
-    splash ||
-    !languageChecked
+    return translatedMessages[message.id] || message.content;
+  }
+
+  function announcementText(
+    announcement: Announcement
   ) {
+    if (
+      originalAnnouncements[announcement.id] ||
+      announcement.source_language === language
+    ) {
+      return announcement.content;
+    }
+
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#fafafa]">
-        <div className="flex flex-col items-center">
-          <h1 className="animate-[brandIntro_0.9s_ease-out_forwards] text-[52px] font-light tracking-[-0.08em] text-black">
-            WYD
-          </h1>
+      translatedAnnouncements[announcement.id] ||
+      announcement.content
+    );
+  }
 
-          <p className="mt-1 animate-[brandSub_1.1s_ease-out_forwards] text-[10px] font-medium lowercase tracking-[0.42em] text-neutral-400">
+  // -------------------------------------
+  // SPLASH
+  // -------------------------------------
+
+  if (splash) {
+    return (
+      <main className="flex min-h-[100dvh] items-center justify-center bg-[#fffefb]">
+        <div className="text-center">
+          <div className="relative inline-block">
+            <h1 className="animate-[brandIntro_0.8s_ease-out_forwards] text-[56px] font-black tracking-[-0.07em] text-[#101820]">
+              WYD
+            </h1>
+
+            <span className="absolute -right-3 top-1 h-3 w-3 rounded-full bg-[#FFD43B]" />
+          </div>
+
+          <p className="animate-[brandSub_1s_ease-out_forwards] text-[10px] lowercase tracking-[0.42em] text-neutral-400">
             messenger
           </p>
         </div>
@@ -1901,1296 +1457,827 @@ export default function RoomPage() {
     );
   }
 
-  if (
-    firstLanguageChoice
-  ) {
+  if (needsLanguage) {
     return (
       <LanguageScreen
         language={language}
-        onSelect={
-          selectLanguage
-        }
+        onSelect={chooseLanguage}
       />
     );
   }
 
-  if (
-    showNameSetup ||
-    !displayName
-  ) {
+  if (needsName) {
     return (
       <NameScreen
-        title={
-          t.yourName
-        }
-        description={
-          t.nameDescription
-        }
-        placeholder={
-          t.namePlaceholder
-        }
-        button={
-          t.continue
-        }
-        value={
-          nameInput
-        }
-        onChange={
-          setNameInput
-        }
-        onSave={
-          saveName
-        }
+        title={t.yourName}
+        description={t.nameDescription}
+        placeholder={t.enterName}
+        buttonText={t.continue}
+        onSave={saveFirstName}
       />
     );
   }
 
-  if (roomLoading) {
+  if (!supabase) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white">
-        <p className="text-sm text-neutral-400">
-          Preparing room...
-        </p>
+      <main className="flex min-h-[100dvh] items-center justify-center bg-[#fffefb] p-6">
+        <div className="max-w-[350px] rounded-[28px] border border-red-100 bg-red-50 p-6">
+          <p className="font-bold text-red-600">
+            Supabase settings are missing.
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-red-500">
+            Check NEXT_PUBLIC_SUPABASE_URL and
+            NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.
+          </p>
+        </div>
       </main>
     );
   }
 
-  const latestAnnouncement =
-    announcements[0];
-
-  const participantCount =
-    onlineParticipants.length;
-
-  function getSenderName(
-    userId: string
-  ) {
-    const online =
-      onlineParticipants.find(
-        (item) =>
-          item.user_id ===
-          userId
-      );
-
-    if (online) {
-      return online.name;
-    }
-
-    const saved =
-      participantDirectory.find(
-        (item) =>
-          item.user_id ===
-          userId
-      );
-
+  if (roomEnded && !roomLoading) {
     return (
-      saved?.display_name ||
-      "Guest"
+      <main className="flex min-h-[100dvh] justify-center bg-[#f4f4f2] p-4 text-[#101820]">
+        <div className="flex min-h-[calc(100dvh-32px)] w-full max-w-[430px] flex-col rounded-[34px] bg-[#fffefb] px-6 py-8">
+          <Brand />
+
+          <div className="my-auto pb-14">
+            <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-[#fff1f2] text-[26px] text-[#ff4458]">
+              ×
+            </div>
+
+            <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.18em] text-[#ff4458]">
+              Room ended
+            </p>
+
+            <h2 className="mt-3 text-[38px] font-bold leading-[1.05] tracking-[-0.055em]">
+              {t.endedTitle}
+            </h2>
+
+            <p className="mt-5 text-sm leading-6 text-neutral-500">
+              {t.endedDescription}
+            </p>
+          </div>
+
+          <button
+            onClick={returnFromRoom}
+            className="w-full rounded-[22px] bg-[#2868d8] py-5 text-sm font-bold text-white"
+          >
+            {exitButtonText}
+          </button>
+        </div>
+      </main>
     );
   }
 
-  function priorityInfo(
-    priority: Priority
-  ) {
-    if (
-      priority === "urgent"
-    ) {
-      return {
-        label:
-          t.urgent,
-
-        dot:
-          "bg-red-500",
-
-        badge:
-          "bg-red-500 text-white",
-
-        panel:
-          "border-red-200 bg-red-50",
-      };
-    }
-
-    if (
-      priority ===
-      "important"
-    ) {
-      return {
-        label:
-          t.important,
-
-        dot:
-          "bg-amber-500",
-
-        badge:
-          "bg-amber-100 text-amber-700",
-
-        panel:
-          "border-amber-200 bg-amber-50",
-      };
-    }
-
-    return {
-      label:
-        t.normal,
-
-      dot:
-        "bg-neutral-400",
-
-      badge:
-        "bg-neutral-100 text-neutral-600",
-
-      panel:
-        "border-neutral-200 bg-white",
-    };
-  }
-
   return (
-    <main className="min-h-screen bg-[#f3f3f1] text-black">
-      <div className="mx-auto flex h-[100dvh] w-full max-w-[430px] flex-col overflow-hidden bg-white">
+    <main className="h-[100dvh] bg-[#f4f4f2] text-[#101820]">
+      <div className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#fffefb]">
 
         {/* HEADER */}
 
-        <header className="shrink-0 border-b border-neutral-100 bg-white px-4 pb-3 pt-5">
+        <header className="shrink-0 border-b border-neutral-100 bg-[#fffefb]/95 px-4 pb-3 pt-4 backdrop-blur-xl">
           <div className="flex items-center justify-between">
 
             <button
-              onClick={() =>
-                router.push("/")
-              }
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-100 text-xl transition active:scale-95"
+              onClick={() => setShowLeaveConfirm(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f5f5f2] text-[22px]"
             >
-              ←
+              ‹
             </button>
 
             <button
-              onClick={() =>
-                setShowRoomMenu(
-                  true
-                )
-              }
-              className="min-w-0 flex-1 px-3 text-center"
+              onClick={() => setShowRoomMenu(true)}
+              className="flex flex-col items-center px-4"
             >
-              <p className="text-[11px] font-semibold tracking-[0.18em]">
-                WYD
-              </p>
+              <div className="relative">
+                <p className="text-[18px] font-black tracking-[-0.055em]">
+                  WYD
+                </p>
 
-              <p className="mt-0.5 text-[11px] text-neutral-400">
-                {language === "ko"
-                  ? `${participantCount}${t.peopleOnline}`
-                  : `${participantCount} ${t.peopleOnline}`}
-              </p>
+                <span className="absolute -right-2 top-0 h-2 w-2 rounded-full bg-[#FFD43B]" />
+              </div>
+
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#46b96b]" />
+
+                <span className="text-[10px] text-neutral-400">
+                  {onlineParticipants.length} {t.online}
+                </span>
+              </div>
             </button>
 
             <button
-              onClick={() =>
-                setShowQR(true)
-              }
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-black text-xl text-white transition active:scale-95"
+              onClick={() => setShowQR(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-[#eef5ff] text-[#2868d8]"
             >
-              ⌗
+              <QrIcon />
             </button>
-
           </div>
         </header>
 
-        {/* THIN ANNOUNCEMENT BAR */}
+        {/* PINNED ANNOUNCEMENT */}
 
-        <div className="shrink-0 px-4 pt-3">
-          {latestAnnouncement ? (
-            <button
-              onClick={async () => {
-                await markAsRead(
-                  latestAnnouncement.id
-                );
-
-                setShowAnnouncementList(
-                  true
-                );
-              }}
-              className={`flex w-full items-center gap-3 rounded-[18px] border px-4 py-3 text-left ${
-                priorityInfo(
-                  latestAnnouncement.priority
-                ).panel
+        {latestAnnouncement && (
+          <button
+            onClick={() => setShowAnnouncements(true)}
+            className={`mx-4 mt-3 flex shrink-0 items-center gap-3 rounded-[20px] border px-4 py-3 text-left ${
+              latestAnnouncement.priority === "urgent"
+                ? "border-red-100 bg-[#fff5f5]"
+                : latestAnnouncement.priority === "important"
+                ? "border-[#ffe9aa] bg-[#fffaf0]"
+                : "border-[#dce9ff] bg-[#f7fbff]"
+            }`}
+          >
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                latestAnnouncement.priority === "urgent"
+                  ? "bg-[#ff4458]"
+                  : latestAnnouncement.priority === "important"
+                  ? "bg-[#f5b51b]"
+                  : "bg-[#2868d8]"
               }`}
-            >
-              <span
-                className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                  priorityInfo(
-                    latestAnnouncement.priority
-                  ).dot
-                }`}
-              />
+            />
 
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-neutral-400">
+                {t.announcement}
+              </p>
 
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-400">
-                    {priorityInfo(
-                      latestAnnouncement.priority
-                    ).label}
-                  </span>
+              <p className="mt-0.5 truncate text-[12px] font-semibold">
+                {announcementText(latestAnnouncement)}
+              </p>
+            </div>
 
-                  {latestAnnouncement.source_language !==
-                    language &&
-                    hasTranslation(
-                      "announcement",
-                      latestAnnouncement.id,
-                      latestAnnouncement.content,
-                      latestAnnouncement.source_language
-                    ) && (
-                      <span className="text-[9px] text-neutral-400">
-                        · {t.translated}
-                      </span>
-                    )}
-
-                </div>
-
-                <p className="mt-1 truncate text-[13px] font-medium">
-                  {translatedText(
-                    "announcement",
-                    latestAnnouncement.id,
-                    latestAnnouncement.content,
-                    latestAnnouncement.source_language
-                  )}
-                </p>
-              </div>
-
-              <span className="text-neutral-400">
-                ›
-              </span>
-            </button>
-          ) : isOwner ? (
-            <button
-              onClick={
-                newAnnouncement
-              }
-              className="flex w-full items-center justify-between rounded-[18px] bg-neutral-50 px-4 py-3 text-left"
-            >
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-400">
-                  {t.announcements}
-                </p>
-
-                <p className="mt-1 text-[13px] font-medium">
-                  {t.noAnnouncement}
-                </p>
-              </div>
-
-              <span className="text-xl">
-                +
-              </span>
-            </button>
-          ) : null}
-        </div>
-
-        {/* ERROR */}
-
-        {errorMessage && (
-          <div className="mx-4 mt-3 shrink-0 rounded-2xl bg-red-50 px-4 py-3">
-            <p className="break-words text-xs leading-5 text-red-600">
-              {errorMessage}
-            </p>
-          </div>
+            <span className="text-neutral-300">›</span>
+          </button>
         )}
 
-        {/* CHAT */}
+        {/* MESSAGES */}
 
         <section className="flex-1 overflow-y-auto px-4 pb-4 pt-5">
-
-          {messages.length === 0 ? (
-            <div className="flex min-h-full items-center justify-center">
-              <div className="max-w-[270px] text-center">
-
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[20px] bg-neutral-100 text-xl">
-                  WYD
-                </div>
-
-                <h2 className="mt-5 text-[20px] font-semibold tracking-[-0.03em]">
-                  {t.start}
-                </h2>
-
-                <p className="mt-2 text-sm leading-6 text-neutral-400">
-                  {t.startDescription}
-                </p>
-
-                <button
-                  onClick={() =>
-                    setShowQR(
-                      true
-                    )
-                  }
-                  className="mt-6 rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
-                >
-                  {t.qrCode}
-                </button>
-
+          {roomLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-neutral-200 border-t-[#2868d8]" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center pb-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-[#eef5ff] text-[26px] text-[#2868d8]">
+                •••
               </div>
+
+              <p className="mt-4 text-sm font-semibold">
+                {t.noMessages}
+              </p>
+
+              <p className="mt-1 text-[11px] text-neutral-400">
+                WYD · {roomId}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
+              {messages.map((message) => {
+                const mine = message.sender_id === senderId;
 
-              {messages.map(
-                (item) => {
-                  const mine =
-                    item.sender_id ===
-                    senderId;
+                const translated =
+                  message.source_language !== language;
 
-                  const translated =
-                    hasTranslation(
-                      "message",
-                      item.id,
-                      item.content,
-                      item.source_language
-                    );
+                const showingOriginal =
+                  !!originalMessages[message.id];
 
-                  const showingOriginal =
-                    isShowingOriginal(
-                      "message",
-                      item.id,
-                      item.content,
-                      item.source_language
-                    );
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex ${
+                      mine ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div className="max-w-[82%]">
+                      {!mine && (
+                        <p className="mb-1.5 ml-2 text-[10px] font-semibold text-neutral-400">
+                          {getSenderName(message.sender_id)}
+                        </p>
+                      )}
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={`flex ${
-                        mine
-                          ? "justify-end"
-                          : "justify-start"
-                      }`}
-                    >
-                      <div className="max-w-[82%]">
+                      <div
+                        className={`rounded-[23px] px-4 py-3 ${
+                          mine
+                            ? "rounded-br-[7px] bg-[#2868d8] text-white shadow-[0_8px_20px_rgba(40,104,216,0.16)]"
+                            : "rounded-bl-[7px] border border-neutral-100 bg-white shadow-[0_7px_22px_rgba(0,0,0,0.045)]"
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words text-[14px] leading-6">
+                          {messageText(message)}
+                        </p>
+                      </div>
 
-                        {!mine && (
-                          <p className="mb-1.5 ml-2 text-[11px] font-medium text-neutral-400">
-                            {getSenderName(
-                              item.sender_id
-                            )}
-                          </p>
-                        )}
-
+                      {translated && (
                         <div
-                          className={`rounded-[22px] px-4 py-3 ${
+                          className={`mt-1.5 flex items-center gap-2 ${
                             mine
-                              ? "rounded-br-[7px] bg-black text-white"
-                              : "rounded-bl-[7px] bg-neutral-100 text-black"
+                              ? "justify-end pr-1"
+                              : "pl-1"
                           }`}
                         >
-                          <p className="whitespace-pre-wrap break-words text-[15px] leading-[1.55]">
-                            {translatedText(
-                              "message",
-                              item.id,
-                              item.content,
-                              item.source_language
-                            )}
-                          </p>
-                        </div>
+                          <span className="text-[9px] text-neutral-400">
+                            {showingOriginal
+                              ? t.original
+                              : t.translated}
+                          </span>
 
-                        {item.source_language !==
-                          language && (
-                          <div
-                            className={`mt-1.5 flex items-center gap-2 ${
-                              mine
-                                ? "justify-end pr-1"
-                                : "justify-start pl-2"
-                            }`}
+                          <button
+                            onClick={() =>
+                              setOriginalMessages((current) => ({
+                                ...current,
+                                [message.id]:
+                                  !current[message.id],
+                              }))
+                            }
+                            className="text-[9px] font-semibold text-[#2868d8]"
                           >
-                            {translated ? (
-                              <>
-                                <span className="text-[9px] text-neutral-400">
-                                  {showingOriginal
-                                    ? t.original
-                                    : t.translated}
-                                  {" · "}
-                                  {languageName(
-                                    item.source_language
-                                  )}
-                                </span>
-
-                                <button
-                                  onClick={() =>
-                                    toggleOriginal(
-                                      "message",
-                                      item.id,
-                                      item.content,
-                                      item.source_language
-                                    )
-                                  }
-                                  className="text-[9px] font-semibold text-neutral-500"
-                                >
-                                  {showingOriginal
-                                    ? t.viewTranslation
-                                    : t.viewOriginal}
-                                </button>
-                              </>
-                            ) : (
-                              <span className="text-[9px] text-neutral-400">
-                                {t.translating}
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                      </div>
+                            {showingOriginal
+                              ? t.translated
+                              : t.original}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  );
-                }
-              )}
+                  </div>
+                );
+              })}
 
-              <div ref={bottomRef} />
-
+              <div ref={messagesEndRef} />
             </div>
           )}
         </section>
 
         {/* INPUT */}
 
-        <section className="shrink-0 border-t border-neutral-100 bg-white px-3 pb-5 pt-3">
-          <div className="flex items-end gap-2">
+        <div className="shrink-0 border-t border-neutral-100 bg-[#fffefb] px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          <form
+            onSubmit={sendMessage}
+            className="flex items-end gap-2"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                isOwner
+                  ? setShowActions(true)
+                  : setShowQR(true)
+              }
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[25px] ${
+                isOwner
+                  ? "bg-[#fff3cd] text-[#e7a30c]"
+                  : "bg-[#eef5ff] text-[#2868d8]"
+              }`}
+            >
+              {isOwner ? "+" : "⌗"}
+            </button>
 
-            {isOwner && (
-              <button
-                onClick={() =>
-                  setShowActions(
-                    true
-                  )
-                }
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-2xl transition active:scale-95"
-              >
-                +
-              </button>
-            )}
-
-            <div className="flex min-w-0 flex-1 items-end rounded-[25px] bg-neutral-100 p-1.5">
-
-              <textarea
-                value={message}
+            <div className="flex min-h-11 flex-1 items-center rounded-[22px] bg-[#f4f4f2] px-4">
+              <input
+                value={messageInput}
                 onChange={(event) =>
-                  setMessage(
-                    event.target.value
-                  )
+                  setMessageInput(event.target.value)
                 }
-                placeholder={
-                  t.message
-                }
-                rows={1}
-                className="max-h-28 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-4 py-3 text-[15px] outline-none placeholder:text-neutral-400"
+                placeholder={t.messagePlaceholder}
+                className="min-w-0 flex-1 bg-transparent py-3 text-[14px] outline-none placeholder:text-neutral-400"
               />
-
-              <button
-                onClick={
-                  sendMessage
-                }
-                disabled={
-                  !message.trim() ||
-                  sending
-                }
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black text-lg text-white transition active:scale-95 disabled:bg-neutral-300"
-              >
-                {sending
-                  ? "…"
-                  : "↑"}
-              </button>
-
             </div>
-          </div>
-        </section>
+
+            <button
+              type="submit"
+              disabled={!messageInput.trim()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2868d8] text-[20px] text-white disabled:bg-neutral-200"
+            >
+              ↑
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* ROOM MENU */}
 
       {showRoomMenu && (
-        <Sheet
-          onClose={() =>
-            setShowRoomMenu(
-              false
-            )
-          }
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-400">
-                WYD
-              </p>
+        <Sheet onClose={() => setShowRoomMenu(false)}>
+          <SheetHeader
+            eyebrow="WYD"
+            title={t.menu}
+            onClose={() => setShowRoomMenu(false)}
+          />
 
-              <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.04em]">
-                {t.roomMenu}
-              </h2>
-
-              <p className="mt-1 text-xs text-neutral-400">
-                {roomId}
-              </p>
-            </div>
-
-            <CloseButton
-              onClick={() =>
-                setShowRoomMenu(
-                  false
-                )
-              }
-            />
-          </div>
-
-          <div className="mt-7 space-y-2">
-
+          <div className="mt-6 space-y-2">
             <MenuRow
-              title={
-                t.participants
-              }
-              value={
-                language === "ko"
-                  ? `${participantCount}${t.peopleOnline}`
-                  : `${participantCount} ${t.peopleOnline}`
-              }
+              icon="●"
+              iconClass="bg-[#eef8f1] text-[#46a968]"
+              title={t.participants}
+              detail={`${onlineParticipants.length}`}
               onClick={() => {
-                setShowRoomMenu(
-                  false
-                );
-
-                setShowParticipants(
-                  true
-                );
+                setShowRoomMenu(false);
+                setShowParticipants(true);
               }}
             />
 
             <MenuRow
-              title={
-                t.language
-              }
-              value={
-                languageName(
-                  language
-                )
+              icon="文"
+              iconClass="bg-[#eef5ff] text-[#2868d8]"
+              title={t.language}
+              detail={
+                languages.find(
+                  (item) => item.code === language
+                )?.name
               }
               onClick={() => {
-                setShowRoomMenu(
-                  false
-                );
-
-                setShowLanguage(
-                  true
-                );
+                setShowRoomMenu(false);
+                setShowLanguage(true);
               }}
             />
 
             <MenuRow
-              title={
-                t.announcements
-              }
-              value={`${announcements.length}`}
-              onClick={
-                openAnnouncements
-              }
+              icon="!"
+              iconClass="bg-[#fff5d9] text-[#e3a20c]"
+              title={t.announcements}
+              detail={`${announcements.length}`}
+              onClick={() => {
+                setShowRoomMenu(false);
+                setShowAnnouncements(true);
+              }}
             />
 
             <MenuRow
-              title={
-                t.qrCode
-              }
+              icon="⌗"
+              iconClass="bg-[#eef5ff] text-[#2868d8]"
+              title={t.qr}
               onClick={() => {
-                setShowRoomMenu(
-                  false
-                );
-
+                setShowRoomMenu(false);
                 setShowQR(true);
               }}
             />
 
             <MenuRow
-              title={
-                t.changeName
-              }
-              value={
-                displayName
-              }
+              icon="Aa"
+              iconClass="bg-[#f4f4f2] text-[#101820]"
+              title={t.changeName}
+              detail={displayName}
               onClick={() => {
-                setNameInput(
-                  displayName
-                );
-
-                setShowRoomMenu(
-                  false
-                );
-
-                setShowNameSetup(
-                  true
-                );
+                setNameDraft(displayName);
+                setShowRoomMenu(false);
+                setShowNameEdit(true);
               }}
             />
 
-          </div>
+            {isOwner && (
+              <button
+                onClick={openNewAnnouncement}
+                className="mt-4 w-full rounded-[20px] bg-[#101820] py-4 text-sm font-bold text-white"
+              >
+                + {t.writeAnnouncement}
+              </button>
+            )}
 
-          {isOwner && (
+            {/* 모두 채팅방에서 나갈 수 있다 */}
+
             <button
-              onClick={
-                newAnnouncement
-              }
-              className="mt-5 w-full rounded-[20px] bg-black py-4 text-sm font-semibold text-white"
+              onClick={() => {
+                setShowRoomMenu(false);
+                setShowLeaveConfirm(true);
+              }}
+              className="mt-2 w-full rounded-[20px] bg-[#eef5ff] py-4 text-sm font-bold text-[#2868d8]"
             >
-              + {t.writeAnnouncement}
+              ← {t.leave}
             </button>
-          )}
+
+            {/* 운영자에게만 방 자체 종료 기능 제공 */}
+
+            {isOwner && (
+              <button
+                onClick={() => {
+                  setShowRoomMenu(false);
+                  setShowEndConfirm(true);
+                }}
+                className="mt-2 w-full rounded-[20px] bg-[#fff1f2] py-4 text-sm font-bold text-[#ff4458]"
+              >
+                {t.endRoom}
+              </button>
+            )}
+          </div>
         </Sheet>
       )}
 
       {/* OWNER ACTIONS */}
 
-      {showActions && isOwner && (
-        <Sheet
-          onClose={() =>
-            setShowActions(false)
-          }
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
-                WYD
-              </p>
+      {showActions && (
+        <Sheet onClose={() => setShowActions(false)}>
+          <SheetHeader
+            eyebrow="WYD"
+            title={t.actions}
+            onClose={() => setShowActions(false)}
+          />
 
-              <h2 className="mt-2 text-[26px] font-semibold">
-                {t.actions}
-              </h2>
-            </div>
+          <div className="mt-6 space-y-2">
+            <MenuRow
+              icon="+"
+              iconClass="bg-[#fff5d9] text-[#e3a20c]"
+              title={t.writeAnnouncement}
+              onClick={openNewAnnouncement}
+            />
 
-            <CloseButton
-              onClick={() =>
-                setShowActions(
-                  false
-                )
-              }
+            <MenuRow
+              icon="⌗"
+              iconClass="bg-[#eef5ff] text-[#2868d8]"
+              title={t.qr}
+              onClick={() => {
+                setShowActions(false);
+                setShowQR(true);
+              }}
             />
           </div>
-
-          <button
-            onClick={
-              newAnnouncement
-            }
-            className="mt-6 flex w-full items-center justify-between rounded-[22px] bg-black px-5 py-5 text-left text-white"
-          >
-            <div>
-              <p className="text-sm font-semibold">
-                {t.writeAnnouncement}
-              </p>
-
-              <p className="mt-1 text-xs text-neutral-400">
-                {t.announcements}
-              </p>
-            </div>
-
-            <span className="text-2xl">
-              +
-            </span>
-          </button>
-
-          <button
-            onClick={() => {
-              setShowActions(
-                false
-              );
-
-              setShowQR(true);
-            }}
-            className="mt-2 flex w-full items-center justify-between rounded-[22px] bg-neutral-100 px-5 py-5 text-left"
-          >
-            <p className="text-sm font-semibold">
-              {t.qrCode}
-            </p>
-
-            <span>
-              ⌗
-            </span>
-          </button>
         </Sheet>
       )}
 
       {/* PARTICIPANTS */}
 
       {showParticipants && (
-        <Sheet
-          onClose={() =>
-            setShowParticipants(
-              false
-            )
-          }
-        >
-          <div className="flex items-start justify-between">
+        <Sheet onClose={() => setShowParticipants(false)}>
+          <SheetHeader
+            eyebrow={`${onlineParticipants.length} ${t.online}`}
+            title={t.participants}
+            onClose={() => setShowParticipants(false)}
+          />
 
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
-                WYD
-              </p>
+          <div className="mt-6 max-h-[55vh] space-y-2 overflow-y-auto">
+            {onlineParticipants.map((participant) => {
+              const mine =
+                participant.user_id === senderId;
 
-              <h2 className="mt-2 text-[28px] font-semibold">
-                {t.participants}
-              </h2>
+              const host =
+                participant.user_id === ownerId;
 
-              <p className="mt-1 text-xs text-neutral-400">
-                {language === "ko"
-                  ? `${participantCount}${t.peopleOnline}`
-                  : `${participantCount} ${t.peopleOnline}`}
-              </p>
-            </div>
+              return (
+                <div
+                  key={participant.user_id}
+                  className="flex items-center rounded-[20px] bg-[#f7f7f4] px-4 py-3.5"
+                >
+                  <span className="mr-3 h-2.5 w-2.5 rounded-full bg-[#46b96b]" />
 
-            <CloseButton
-              onClick={() =>
-                setShowParticipants(
-                  false
-                )
-              }
-            />
-          </div>
-
-          <div className="mt-6 max-h-[52vh] space-y-2 overflow-y-auto">
-            {onlineParticipants.map(
-              (participant) => {
-                const mine =
-                  participant.user_id ===
-                  senderId;
-
-                const host =
-                  participant.user_id ===
-                  ownerId;
-
-                return (
-                  <div
-                    key={
-                      participant.user_id
-                    }
-                    className="flex items-center gap-3 rounded-[20px] bg-neutral-100 px-4 py-3"
-                  >
-                    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold">
-
-                      {participant.name
-                        .slice(0, 1)
-                        .toUpperCase()}
-
-                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-neutral-100 bg-green-500" />
-
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-
-                        <p className="truncate text-sm font-semibold">
-                          {participant.name}
-                        </p>
-
-                        {mine && (
-                          <span className="rounded-full bg-black px-2 py-0.5 text-[9px] font-semibold text-white">
-                            {t.you}
-                          </span>
-                        )}
-
-                        {host && (
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-semibold text-neutral-500">
-                            {t.host}
-                          </span>
-                        )}
-
-                      </div>
-
-                      <p className="mt-1 text-[10px] text-neutral-400">
-                        {languageName(
-                          participant.language
-                        )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-bold">
+                        {participant.display_name}
                       </p>
+
+                      {mine && <Tag>{t.you}</Tag>}
+
+                      {host && (
+                        <Tag yellow>
+                          {t.host}
+                        </Tag>
+                      )}
                     </div>
+
+                    <p className="mt-1 text-[10px] text-neutral-400">
+                      {languages.find(
+                        (item) =>
+                          item.code === participant.language
+                      )?.name || participant.language}
+                    </p>
                   </div>
-                );
-              }
-            )}
+                </div>
+              );
+            })}
           </div>
-
-          <button
-            onClick={() => {
-              setNameInput(
-                displayName
-              );
-
-              setShowParticipants(
-                false
-              );
-
-              setShowNameSetup(
-                true
-              );
-            }}
-            className="mt-5 w-full rounded-[20px] bg-neutral-100 py-4 text-sm font-semibold"
-          >
-            {t.changeName}
-          </button>
         </Sheet>
       )}
 
       {/* QR */}
 
       {showQR && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-5 backdrop-blur-sm">
+        <Sheet onClose={() => setShowQR(false)}>
+          <SheetHeader
+            eyebrow={`WYD · ${roomId}`}
+            title={t.roomQR}
+            onClose={() => setShowQR(false)}
+          />
 
-          <div className="w-full max-w-[360px] rounded-[32px] bg-white p-7">
+          <p className="mt-3 text-sm leading-6 text-neutral-500">
+            {t.qrDescription}
+          </p>
 
-            <div className="flex items-start justify-between">
-
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
-                  WYD
-                </p>
-
-                <h2 className="mt-2 text-[27px] font-semibold tracking-[-0.04em]">
-                  {t.join}
-                </h2>
-              </div>
-
-              <CloseButton
-                onClick={() =>
-                  setShowQR(false)
-                }
-              />
-            </div>
-
-            <p className="mt-3 text-sm leading-6 text-neutral-500">
-              {t.joinDescription}
-            </p>
-
-            <div className="mt-7 flex justify-center rounded-[28px] bg-neutral-50 p-6">
+          <div className="mt-7 flex justify-center">
+            <div className="rounded-[30px] border border-[#dce9ff] bg-white p-6 shadow-[0_14px_40px_rgba(40,104,216,0.09)]">
               {roomUrl && (
                 <QRCodeSVG
                   value={roomUrl}
-                  size={210}
+                  size={220}
                   level="M"
+                  includeMargin={false}
+                  fgColor="#101820"
+                  bgColor="#ffffff"
                 />
               )}
             </div>
+          </div>
 
-            <p className="mt-4 text-center text-[10px] font-medium text-neutral-400">
-              {roomId}
+          <div className="mt-5 rounded-[18px] bg-[#f4f4f2] px-4 py-3 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
+              Room
             </p>
 
-            <button
-              onClick={() =>
-                setShowQR(false)
-              }
-              className="mt-6 w-full rounded-[20px] bg-black py-4 text-sm font-semibold text-white"
-            >
-              {t.close}
-            </button>
-
+            <p className="mt-1 font-mono text-sm font-bold">
+              {roomId}
+            </p>
           </div>
-        </div>
+        </Sheet>
       )}
 
-      {/* ANNOUNCEMENT LIST */}
+      {/* ANNOUNCEMENTS */}
 
-      {showAnnouncementList && (
-        <Sheet
-          onClose={() =>
-            setShowAnnouncementList(
-              false
-            )
-          }
-        >
-          <div className="flex items-start justify-between">
+      {showAnnouncements && (
+        <Sheet onClose={() => setShowAnnouncements(false)}>
+          <SheetHeader
+            eyebrow="WYD"
+            title={t.announcements}
+            onClose={() => setShowAnnouncements(false)}
+          />
 
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
-                WYD
-              </p>
-
-              <h2 className="mt-2 text-[28px] font-semibold">
-                {t.allAnnouncements}
-              </h2>
-            </div>
-
-            <CloseButton
-              onClick={() =>
-                setShowAnnouncementList(
-                  false
-                )
-              }
-            />
-          </div>
-
-          {isOwner && (
-            <button
-              onClick={
-                newAnnouncement
-              }
-              className="mt-5 w-full rounded-[18px] bg-black py-3.5 text-sm font-semibold text-white"
-            >
-              + {t.writeAnnouncement}
-            </button>
-          )}
-
-          <div className="mt-5 max-h-[55vh] space-y-3 overflow-y-auto">
-
-            {announcements.length ===
-            0 ? (
-              <div className="rounded-[22px] bg-neutral-100 px-5 py-8 text-center">
+          <div className="mt-6 max-h-[58vh] space-y-3 overflow-y-auto">
+            {announcements.length === 0 ? (
+              <div className="rounded-[22px] bg-[#f5f5f2] p-6 text-center">
                 <p className="text-sm text-neutral-400">
-                  {t.noAnnouncement}
+                  {t.noAnnouncements}
                 </p>
               </div>
             ) : (
-              announcements.map(
-                (
-                  item,
-                  index
-                ) => {
-                  const info =
-                    priorityInfo(
-                      item.priority
-                    );
+              announcements.map((announcement) => {
+                const translated =
+                  announcement.source_language !== language;
 
-                  const translated =
-                    hasTranslation(
-                      "announcement",
-                      item.id,
-                      item.content,
-                      item.source_language
-                    );
+                const showingOriginal =
+                  !!originalAnnouncements[
+                    announcement.id
+                  ];
 
-                  const showingOriginal =
-                    isShowingOriginal(
-                      "announcement",
-                      item.id,
-                      item.content,
-                      item.source_language
-                    );
+                return (
+                  <div
+                    key={announcement.id}
+                    className={`rounded-[22px] border p-4 ${
+                      announcement.priority === "urgent"
+                        ? "border-red-100 bg-[#fff5f5]"
+                        : announcement.priority ===
+                          "important"
+                        ? "border-[#ffe8a0] bg-[#fffaf0]"
+                        : "border-[#dce9ff] bg-[#f8fbff]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <PriorityBadge
+                        priority={announcement.priority}
+                        t={t}
+                      />
 
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() =>
-                        markAsRead(
-                          item.id
-                        )
-                      }
-                      className={`rounded-[22px] border p-5 ${info.panel}`}
-                    >
+                      <span className="text-[9px] text-neutral-400">
+                        {readCounts[announcement.id] || 0}{" "}
+                        {t.confirmed} /{" "}
+                        {onlineParticipants.length}
+                      </span>
+                    </div>
 
-                      <div className="flex items-center justify-between gap-3">
+                    <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6">
+                      {announcementText(announcement)}
+                    </p>
 
-                        <div className="flex items-center gap-2">
-
-                          <span
-                            className={`rounded-full px-3 py-1 text-[10px] font-semibold ${info.badge}`}
+                    <div className="mt-3 flex items-center justify-between">
+                      <div>
+                        {translated && (
+                          <button
+                            onClick={() =>
+                              setOriginalAnnouncements(
+                                (current) => ({
+                                  ...current,
+                                  [announcement.id]:
+                                    !current[
+                                      announcement.id
+                                    ],
+                                })
+                              )
+                            }
+                            className="text-[10px] font-semibold text-[#2868d8]"
                           >
-                            {info.label}
-                          </span>
-
-                          {index ===
-                            0 && (
-                            <span className="text-[9px] font-semibold text-neutral-400">
-                              {t.latest}
-                            </span>
-                          )}
-
-                        </div>
-
-                        {isOwner && (
-                          <span className="text-[10px] text-neutral-400">
-                            {readCounts[
-                              item.id
-                            ] || 0}
-                            {" / "}
-                            {participantCount}
-                          </span>
+                            {showingOriginal
+                              ? t.translated
+                              : t.original}
+                          </button>
                         )}
-
                       </div>
 
-                      <p className="mt-4 whitespace-pre-wrap break-words text-[14px] leading-6">
-                        {translatedText(
-                          "announcement",
-                          item.id,
-                          item.content,
-                          item.source_language
-                        )}
-                      </p>
-
-                      {item.source_language !==
-                        language && (
-                        <div className="mt-3 flex items-center gap-2">
-
-                          {translated ? (
-                            <>
-                              <span className="text-[9px] text-neutral-400">
-                                {showingOriginal
-                                  ? t.original
-                                  : t.translated}
-                                {" · "}
-                                {languageName(
-                                  item.source_language
-                                )}
-                              </span>
-
-                              <button
-                                onClick={(
-                                  event
-                                ) => {
-                                  event.stopPropagation();
-
-                                  toggleOriginal(
-                                    "announcement",
-                                    item.id,
-                                    item.content,
-                                    item.source_language
-                                  );
-                                }}
-                                className="text-[9px] font-semibold text-neutral-600"
-                              >
-                                {showingOriginal
-                                  ? t.viewTranslation
-                                  : t.viewOriginal}
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-[9px] text-neutral-400">
-                              {t.translating}
-                            </span>
-                          )}
-
-                        </div>
-                      )}
-
                       {isOwner && (
-                        <div className="mt-4 flex gap-2">
-
+                        <div className="flex gap-2">
                           <button
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation();
-
-                              editAnnouncement(
-                                item
-                              );
-                            }}
-                            className="rounded-full bg-white px-3 py-2 text-[11px] font-semibold"
+                            onClick={() =>
+                              openEditAnnouncement(
+                                announcement
+                              )
+                            }
+                            className="rounded-full bg-white px-3 py-2 text-[10px] font-semibold"
                           >
                             {t.edit}
                           </button>
 
                           <button
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation();
-
+                            onClick={() =>
                               setDeletingAnnouncement(
-                                item
-                              );
-                            }}
-                            className="rounded-full bg-white px-3 py-2 text-[11px] font-semibold text-red-500"
+                                announcement
+                              )
+                            }
+                            className="rounded-full bg-white px-3 py-2 text-[10px] font-semibold text-red-500"
                           >
                             {t.delete}
                           </button>
-
                         </div>
                       )}
-
                     </div>
-                  );
-                }
-              )
+                  </div>
+                );
+              })
             )}
-
           </div>
+
+          {isOwner && (
+            <button
+              onClick={openNewAnnouncement}
+              className="mt-5 w-full rounded-[20px] bg-[#101820] py-4 text-sm font-bold text-white"
+            >
+              + {t.writeAnnouncement}
+            </button>
+          )}
         </Sheet>
       )}
 
-      {/* ANNOUNCEMENT WRITE */}
+      {/* ANNOUNCEMENT WRITER */}
 
-      {showAnnouncementWriter &&
-        isOwner && (
-          <Sheet
-            onClose={() => {
-              setShowAnnouncementWriter(
-                false
-              );
+      {showWriter && (
+        <Sheet onClose={() => setShowWriter(false)}>
+          <SheetHeader
+            eyebrow="WYD"
+            title={
+              editingAnnouncement
+                ? t.editAnnouncement
+                : t.newAnnouncement
+            }
+            onClose={() => setShowWriter(false)}
+          />
 
-              setEditingAnnouncement(
-                null
-              );
-            }}
-          >
-            <div className="flex items-start justify-between">
+          <textarea
+            value={announcementDraft}
+            onChange={(event) =>
+              setAnnouncementDraft(event.target.value)
+            }
+            rows={5}
+            placeholder={t.announcement}
+            className="mt-6 w-full resize-none rounded-[22px] bg-[#f5f5f2] px-4 py-4 text-sm leading-6 outline-none"
+          />
 
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
-                  WYD
-                </p>
-
-                <h2 className="mt-2 text-[28px] font-semibold">
-                  {editingAnnouncement
-                    ? t.editAnnouncement
-                    : t.newAnnouncement}
-                </h2>
-              </div>
-
-              <CloseButton
-                onClick={() => {
-                  setShowAnnouncementWriter(
-                    false
-                  );
-
-                  setEditingAnnouncement(
-                    null
-                  );
-                }}
-              />
-
-            </div>
-
-            <p className="mt-6 text-xs font-semibold text-neutral-400">
-              {t.priority}
-            </p>
-
-            <div className="mt-3 grid grid-cols-3 gap-2">
-
-              {(
-                [
-                  "normal",
-                  "important",
-                  "urgent",
-                ] as Priority[]
-              ).map(
-                (priority) => (
-                  <button
-                    key={priority}
-                    onClick={() =>
-                      setAnnouncementPriority(
-                        priority
-                      )
-                    }
-                    className={`rounded-[16px] py-3 text-xs font-semibold ${
-                      announcementPriority ===
-                      priority
-                        ? priority ===
-                          "urgent"
-                          ? "bg-red-500 text-white"
-                          : "bg-black text-white"
-                        : "bg-neutral-100 text-black"
-                    }`}
-                  >
-                    {priority ===
-                    "normal"
-                      ? t.normal
-                      : priority ===
-                        "important"
-                      ? t.important
-                      : t.urgent}
-                  </button>
-                )
-              )}
-
-            </div>
-
-            <textarea
-              value={
-                announcementText
-              }
-              onChange={(event) =>
-                setAnnouncementText(
-                  event.target.value
-                )
-              }
-              maxLength={500}
-              placeholder={
-                t.announcementPlaceholder
-              }
-              className="mt-5 h-[190px] w-full resize-none rounded-[22px] bg-neutral-100 p-5 text-[15px] leading-6 outline-none placeholder:text-neutral-400"
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <PriorityButton
+              active={priorityDraft === "normal"}
+              label={t.normal}
+              type="normal"
+              onClick={() => setPriorityDraft("normal")}
             />
 
-            <div className="mt-2 text-right text-[10px] text-neutral-400">
-              {announcementText.length}
-              /500
-            </div>
+            <PriorityButton
+              active={priorityDraft === "important"}
+              label={t.important}
+              type="important"
+              onClick={() => setPriorityDraft("important")}
+            />
 
-            <button
-              onClick={
-                saveAnnouncement
-              }
-              disabled={
-                !announcementText.trim() ||
-                publishingAnnouncement
-              }
-              className="mt-3 w-full rounded-[20px] bg-black py-4 text-sm font-semibold text-white disabled:bg-neutral-300"
-            >
-              {publishingAnnouncement
-                ? "…"
-                : editingAnnouncement
-                ? t.save
-                : t.publish}
-            </button>
-          </Sheet>
-        )}
+            <PriorityButton
+              active={priorityDraft === "urgent"}
+              label={t.urgent}
+              type="urgent"
+              onClick={() => setPriorityDraft("urgent")}
+            />
+          </div>
+
+          <button
+            onClick={saveAnnouncement}
+            disabled={!announcementDraft.trim()}
+            className="mt-5 w-full rounded-[20px] bg-[#101820] py-4 text-sm font-bold text-white disabled:bg-neutral-200"
+          >
+            {t.save}
+          </button>
+        </Sheet>
+      )}
 
       {/* DELETE */}
 
       {deletingAnnouncement && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 px-5 backdrop-blur-sm">
+        <ConfirmSheet
+          title={t.deleteQuestion}
+          description=""
+          cancelText={t.cancel}
+          confirmText={t.delete}
+          danger
+          onCancel={() =>
+            setDeletingAnnouncement(null)
+          }
+          onConfirm={deleteAnnouncement}
+        />
+      )}
 
-          <div className="w-full max-w-[350px] rounded-[30px] bg-white p-6">
+      {/* LEAVE */}
 
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500">
-              !
-            </div>
+      {showLeaveConfirm && (
+        <ConfirmSheet
+          title={t.leaveTitle}
+          description={leaveDescription}
+          cancelText={t.cancel}
+          confirmText={
+            roomEventId
+              ? t.backToEvent
+              : t.leaveButton
+          }
+          onCancel={() =>
+            setShowLeaveConfirm(false)
+          }
+          onConfirm={leaveRoom}
+        />
+      )}
 
-            <h2 className="mt-5 text-[23px] font-semibold tracking-[-0.03em]">
-              {t.deleteTitle}
-            </h2>
+      {/* END */}
 
-            <p className="mt-3 text-sm leading-6 text-neutral-500">
-              {t.deleteDescription}
-            </p>
-
-            <button
-              onClick={
-                deleteAnnouncement
-              }
-              className="mt-6 w-full rounded-[20px] bg-red-500 py-4 text-sm font-semibold text-white"
-            >
-              {t.deleteConfirm}
-            </button>
-
-            <button
-              onClick={() =>
-                setDeletingAnnouncement(
-                  null
-                )
-              }
-              className="mt-2 w-full rounded-[20px] bg-neutral-100 py-4 text-sm font-semibold"
-            >
-              {t.cancel}
-            </button>
-
-          </div>
-        </div>
+      {showEndConfirm && (
+        <ConfirmSheet
+          title={t.endTitle}
+          description={t.endDescription}
+          cancelText={t.cancel}
+          confirmText={t.endButton}
+          danger
+          onCancel={() =>
+            setShowEndConfirm(false)
+          }
+          onConfirm={endRoom}
+        />
       )}
 
       {/* LANGUAGE */}
 
       {showLanguage && (
         <LanguageModal
-          language={
-            language
-          }
-          title={
-            t.chooseLanguage
-          }
-          onSelect={
-            selectLanguage
-          }
-          onClose={() =>
-            setShowLanguage(
-              false
-            )
-          }
+          language={language}
+          title={t.chooseLanguage}
+          onSelect={chooseLanguage}
+          onClose={() => setShowLanguage(false)}
         />
       )}
 
+      {/* NAME */}
+
+      {showNameEdit && (
+        <Sheet onClose={() => setShowNameEdit(false)}>
+          <SheetHeader
+            eyebrow="WYD"
+            title={t.changeName}
+            onClose={() => setShowNameEdit(false)}
+          />
+
+          <input
+            value={nameDraft}
+            onChange={(event) =>
+              setNameDraft(event.target.value)
+            }
+            placeholder={t.enterName}
+            className="mt-6 w-full rounded-[20px] bg-[#f4f4f2] px-4 py-4 text-sm outline-none"
+          />
+
+          <button
+            onClick={saveEditedName}
+            className="mt-4 w-full rounded-[20px] bg-[#101820] py-4 text-sm font-bold text-white"
+          >
+            {t.save}
+          </button>
+        </Sheet>
+      )}
     </main>
+  );
+}
+
+function Brand() {
+  return (
+    <div>
+      <div className="relative inline-block">
+        <h1 className="text-[34px] font-black tracking-[-0.06em]">
+          WYD
+        </h1>
+
+        <span className="absolute -right-3 top-0 h-3 w-3 rounded-full bg-[#FFD43B]" />
+      </div>
+
+      <p className="text-[10px] lowercase tracking-[0.22em] text-neutral-400">
+        messenger
+      </p>
+    </div>
   );
 }
 
@@ -3198,24 +2285,17 @@ function Sheet({
   children,
   onClose,
 }: {
-  children:
-    React.ReactNode;
+  children: ReactNode;
   onClose: () => void;
 }) {
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 px-3 pb-3 backdrop-blur-sm sm:items-center"
-      onClick={
-        onClose
-      }
+      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/30 px-3 pb-3 backdrop-blur-sm sm:items-center"
     >
       <div
-        onClick={(
-          event
-        ) =>
-          event.stopPropagation()
-        }
-        className="w-full max-w-[410px] rounded-[32px] bg-white p-6 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        className="max-h-[92dvh] w-full max-w-[410px] overflow-y-auto rounded-[32px] bg-[#fffefb] p-6 shadow-2xl"
       >
         {children}
       </div>
@@ -3223,131 +2303,235 @@ function Sheet({
   );
 }
 
-function CloseButton({
-  onClick,
+function SheetHeader({
+  eyebrow,
+  title,
+  onClose,
 }: {
-  onClick: () => void;
+  eyebrow: string;
+  title: string;
+  onClose: () => void;
 }) {
   return (
-    <button
-      onClick={
-        onClick
-      }
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xl"
-    >
-      ×
-    </button>
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2868d8]">
+          {eyebrow}
+        </p>
+
+        <h2 className="mt-2 text-[27px] font-bold tracking-[-0.045em]">
+          {title}
+        </h2>
+      </div>
+
+      <button
+        onClick={onClose}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f4f4f2] text-xl"
+      >
+        ×
+      </button>
+    </div>
   );
 }
 
 function MenuRow({
+  icon,
+  iconClass,
   title,
-  value,
+  detail,
   onClick,
 }: {
+  icon: string;
+  iconClass: string;
   title: string;
-  value?: string;
+  detail?: string;
   onClick: () => void;
 }) {
   return (
     <button
-      onClick={
-        onClick
-      }
-      className="flex w-full items-center justify-between rounded-[18px] bg-neutral-100 px-5 py-4 text-left transition active:scale-[0.99]"
+      onClick={onClick}
+      className="flex w-full items-center rounded-[20px] bg-[#f7f7f4] p-3 text-left active:scale-[0.99]"
     >
-      <span className="text-sm font-semibold">
-        {title}
-      </span>
-
-      <div className="flex items-center gap-2">
-        {value && (
-          <span className="max-w-[150px] truncate text-xs text-neutral-400">
-            {value}
-          </span>
-        )}
-
-        <span className="text-neutral-400">
-          ›
-        </span>
+      <div
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] text-sm font-bold ${iconClass}`}
+      >
+        {icon}
       </div>
+
+      <p className="ml-3 flex-1 text-sm font-semibold">
+        {title}
+      </p>
+
+      {detail && (
+        <span className="mr-2 text-[11px] text-neutral-400">
+          {detail}
+        </span>
+      )}
+
+      <span className="text-neutral-300">›</span>
     </button>
   );
 }
 
-function NameScreen({
+function Tag({
+  children,
+  yellow = false,
+}: {
+  children: ReactNode;
+  yellow?: boolean;
+}) {
+  return (
+    <span
+      className={`rounded-full px-2 py-1 text-[8px] font-bold ${
+        yellow
+          ? "bg-[#fff1bd] text-[#b87d00]"
+          : "bg-[#e9f2ff] text-[#2868d8]"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function PriorityBadge({
+  priority,
+  t,
+}: {
+  priority: "normal" | "important" | "urgent";
+  t: Record<string, string>;
+}) {
+  const label =
+    priority === "urgent"
+      ? t.urgent
+      : priority === "important"
+      ? t.important
+      : t.normal;
+
+  const className =
+    priority === "urgent"
+      ? "bg-red-100 text-red-500"
+      : priority === "important"
+      ? "bg-[#fff0bd] text-[#b77c00]"
+      : "bg-[#e8f1ff] text-[#2868d8]";
+
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-[9px] font-bold ${className}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PriorityButton({
+  active,
+  label,
+  type,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  type: "normal" | "important" | "urgent";
+  onClick: () => void;
+}) {
+  let className =
+    "border-neutral-100 bg-[#f7f7f4] text-neutral-500";
+
+  if (active) {
+    if (type === "urgent") {
+      className =
+        "border-red-400 bg-red-50 text-red-500";
+    } else if (type === "important") {
+      className =
+        "border-[#f1bd39] bg-[#fff8e6] text-[#b77c00]";
+    } else {
+      className =
+        "border-[#2868d8] bg-[#eef5ff] text-[#2868d8]";
+    }
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-[16px] border py-3 text-[11px] font-bold ${className}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function QrIcon() {
+  return (
+    <div className="relative h-5 w-5">
+      <span className="absolute left-0 top-0 h-2 w-2 rounded-tl border-l-2 border-t-2 border-current" />
+      <span className="absolute right-0 top-0 h-2 w-2 rounded-tr border-r-2 border-t-2 border-current" />
+      <span className="absolute bottom-0 left-0 h-2 w-2 rounded-bl border-b-2 border-l-2 border-current" />
+      <span className="absolute bottom-0 right-0 h-2 w-2 rounded-br border-b-2 border-r-2 border-current" />
+    </div>
+  );
+}
+
+function ConfirmSheet({
   title,
   description,
-  placeholder,
-  button,
-  value,
-  onChange,
-  onSave,
+  cancelText,
+  confirmText,
+  danger = false,
+  onCancel,
+  onConfirm,
 }: {
   title: string;
   description: string;
-  placeholder: string;
-  button: string;
-  value: string;
-  onChange: (
-    value: string
-  ) => void;
-  onSave: () => void;
+  cancelText: string;
+  confirmText: string;
+  danger?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
 }) {
   return (
-    <main className="min-h-[100dvh] bg-[#f7f7f5] px-6 py-10 text-black">
+    <Sheet onClose={onCancel}>
+      <div
+        className={`flex h-14 w-14 items-center justify-center rounded-[20px] ${
+          danger
+            ? "bg-[#fff1f2] text-[#ff4458]"
+            : "bg-[#eef5ff] text-[#2868d8]"
+        }`}
+      >
+        <span className="text-[24px] font-light">
+          {danger ? "!" : "←"}
+        </span>
+      </div>
 
-      <div className="mx-auto w-full max-w-[430px]">
+      <h2 className="mt-6 text-[27px] font-bold leading-tight tracking-[-0.045em]">
+        {title}
+      </h2>
 
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400">
-          WYD Messenger
-        </p>
-
-        <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.05em]">
-          {title}
-        </h1>
-
-        <p className="mt-4 max-w-[320px] text-sm leading-6 text-neutral-500">
+      {description && (
+        <p className="mt-3 text-sm leading-6 text-neutral-500">
           {description}
         </p>
+      )}
 
-        <input
-          autoFocus
-          value={value}
-          maxLength={30}
-          onChange={(event) =>
-            onChange(
-              event.target.value
-            )
-          }
-          onKeyDown={(event) => {
-            if (
-              event.key ===
-              "Enter"
-            ) {
-              onSave();
-            }
-          }}
-          placeholder={
-            placeholder
-          }
-          className="mt-10 w-full rounded-[24px] bg-white px-5 py-5 text-[17px] font-medium outline-none placeholder:text-neutral-300"
-        />
-
+      <div className="mt-7 flex gap-2">
         <button
-          onClick={
-            onSave
-          }
-          disabled={
-            !value.trim()
-          }
-          className="mt-4 w-full rounded-[22px] bg-black py-4 text-sm font-semibold text-white disabled:bg-neutral-300"
+          onClick={onCancel}
+          className="flex-1 rounded-[18px] bg-[#f4f4f2] py-4 text-sm font-semibold"
         >
-          {button}
+          {cancelText}
         </button>
 
+        <button
+          onClick={onConfirm}
+          className={`flex-1 rounded-[18px] py-4 text-sm font-bold text-white ${
+            danger
+              ? "bg-[#ff4458]"
+              : "bg-[#2868d8]"
+          }`}
+        >
+          {confirmText}
+        </button>
       </div>
-    </main>
+    </Sheet>
   );
 }
 
@@ -3356,34 +2540,34 @@ function LanguageScreen({
   onSelect,
 }: {
   language: string;
-  onSelect: (
-    code: string
-  ) => void;
+  onSelect: (code: string) => void;
 }) {
   return (
-    <main className="min-h-[100dvh] bg-white px-6 py-10 text-black">
+    <main className="min-h-[100dvh] bg-[#f4f4f2] p-4 text-[#101820]">
+      <div className="mx-auto min-h-[calc(100dvh-32px)] max-w-[430px] rounded-[34px] bg-[#fffefb] px-6 py-8">
+        <Brand />
 
-      <div className="mx-auto w-full max-w-[430px]">
+        <div className="mt-16">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2868d8]">
+            Language
+          </p>
 
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-400">
-          Language
-        </p>
+          <h2 className="mt-4 text-[42px] font-bold leading-[1.03] tracking-[-0.055em]">
+            Choose your
+            <br />
+            language.
+          </h2>
 
-        <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.05em]">
-          Choose your
-          <br />
-          language.
-        </h1>
+          <p className="mt-5 text-sm leading-6 text-neutral-500">
+            Messages and announcements will be translated into
+            your language.
+          </p>
+        </div>
 
         <LanguageList
-          language={
-            language
-          }
-          onSelect={
-            onSelect
-          }
+          language={language}
+          onSelect={onSelect}
         />
-
       </div>
     </main>
   );
@@ -3397,44 +2581,20 @@ function LanguageModal({
 }: {
   language: string;
   title: string;
-  onSelect: (
-    code: string
-  ) => void;
+  onSelect: (code: string) => void;
   onClose: () => void;
 }) {
   return (
-    <Sheet
-      onClose={
-        onClose
-      }
-    >
-      <div className="flex items-start justify-between">
-
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">
-            Language
-          </p>
-
-          <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.04em]">
-            {title}
-          </h2>
-        </div>
-
-        <CloseButton
-          onClick={
-            onClose
-          }
-        />
-
-      </div>
+    <Sheet onClose={onClose}>
+      <SheetHeader
+        eyebrow="Language"
+        title={title}
+        onClose={onClose}
+      />
 
       <LanguageList
-        language={
-          language
-        }
-        onSelect={
-          onSelect
-        }
+        language={language}
+        onSelect={onSelect}
       />
     </Sheet>
   );
@@ -3445,45 +2605,102 @@ function LanguageList({
   onSelect,
 }: {
   language: string;
-  onSelect: (
-    code: string
-  ) => void;
+  onSelect: (code: string) => void;
 }) {
   return (
     <div className="mt-6 max-h-[55vh] space-y-2 overflow-y-auto">
+      {languages.map((item) => {
+        const selected = language === item.code;
 
-      {languages.map(
-        (item) => (
+        return (
           <button
-            key={
-              item.code
-            }
-            onClick={() =>
-              onSelect(
-                item.code
-              )
-            }
+            key={item.code}
+            onClick={() => onSelect(item.code)}
             className={`flex w-full items-center justify-between rounded-[18px] px-5 py-4 text-left ${
-              language ===
-              item.code
-                ? "bg-black text-white"
-                : "bg-neutral-100 text-black"
+              selected
+                ? "bg-[#101820] text-white"
+                : "bg-[#f5f5f2] text-[#101820]"
             }`}
           >
             <span className="text-sm font-semibold">
               {item.name}
             </span>
 
-            {language ===
-              item.code && (
-              <span>
+            {selected && (
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FFD43B] text-[10px] font-bold text-[#101820]">
                 ✓
               </span>
             )}
           </button>
-        )
-      )}
-
+        );
+      })}
     </div>
+  );
+}
+
+function NameScreen({
+  title,
+  description,
+  placeholder,
+  buttonText,
+  onSave,
+}: {
+  title: string;
+  description: string;
+  placeholder: string;
+  buttonText: string;
+  onSave: (value: string) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+
+    onSave(value);
+  }
+
+  return (
+    <main className="flex min-h-[100dvh] justify-center bg-[#f4f4f2] p-4 text-[#101820]">
+      <div className="w-full max-w-[430px] rounded-[34px] bg-[#fffefb] px-6 py-8">
+        <Brand />
+
+        <div className="mt-[18vh]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2868d8]">
+            Profile
+          </p>
+
+          <h2 className="mt-4 text-[42px] font-bold tracking-[-0.055em]">
+            {title}
+          </h2>
+
+          <p className="mt-4 max-w-[300px] text-sm leading-6 text-neutral-500">
+            {description}
+          </p>
+
+          <form
+            onSubmit={submit}
+            className="mt-8"
+          >
+            <input
+              autoFocus
+              value={value}
+              onChange={(event) =>
+                setValue(event.target.value)
+              }
+              placeholder={placeholder}
+              className="w-full rounded-[22px] bg-[#f4f4f2] px-5 py-5 text-base outline-none"
+            />
+
+            <button
+              type="submit"
+              disabled={!value.trim()}
+              className="mt-3 w-full rounded-[22px] bg-[#2868d8] py-5 text-sm font-bold text-white disabled:bg-neutral-200"
+            >
+              {buttonText}
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
   );
 }
