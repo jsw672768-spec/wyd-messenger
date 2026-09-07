@@ -805,6 +805,7 @@ export default function Template({
 
 
     function systemNotification() {
+      if (!currentHelpAlert) return;
       try {
         if (
           !(
@@ -1188,6 +1189,8 @@ export default function Template({
     };
   }, [
     currentAnnouncement?.id,
+    currentAnnouncement?.content,
+    currentAnnouncement?.source_language,
     language,
   ]);
 

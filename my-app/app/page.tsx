@@ -8,6 +8,9 @@ import {
   type ReactNode,
 } from "react";
 
+import JoinByLink from "@/components/join-by-link";
+import { joinPath } from "@/lib/join-path";
+import InstallApp from "@/components/install-app";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
@@ -311,13 +314,7 @@ export default function Home() {
             }
 
             try {
-              const url =
-                new URL(decodedText);
-
-              const validPath =
-                /^\/(event|room)\/[^/]+\/?$/.test(
-                  url.pathname
-                );
+              const validPath = joinPath(decodedText);
 
               if (!validPath) {
                 setScannerError(
@@ -344,7 +341,7 @@ export default function Home() {
                * 현재 WYD 주소에서 같은 path만 연다.
                */
               window.location.href =
-                `${window.location.origin}${url.pathname}`;
+                `${window.location.origin}${validPath}`;
             } catch {
               setScannerError(
                 t.invalidQR
@@ -429,6 +426,10 @@ export default function Home() {
   }
 
   async function createEvent() {
+    if (!supabase) {
+      setEventError(language === 'ko' ? '현재 서비스를 준비 중입니다. 잠시 후 다시 시도해주세요.' : 'The service is being prepared. Please try again later.');
+      return;
+    }
     if (
       !supabase ||
       !eventName.trim() ||
@@ -720,6 +721,7 @@ export default function Home() {
 
         <section className="relative z-10 mt-auto space-y-4 px-5 pb-7 pt-14">
 
+
           <button
             onClick={() => {
               setScannerError("");
@@ -795,6 +797,9 @@ export default function Home() {
           <p className="pt-3 text-center text-[11px] text-neutral-400">
             ✓ {t.noAccount}
           </p>
+
+          <JoinByLink language={language} />
+          <InstallApp language={language} />
 
         </section>
 

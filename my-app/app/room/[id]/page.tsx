@@ -11,6 +11,7 @@ import {
 
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { translateText, translationKey } from "@/lib/translation-client";
 import { QRCodeSVG } from "qrcode.react";
 
 type Message = {
@@ -333,16 +334,20 @@ export default function RoomPage() {
     Record<number, number>
   >({});
 
+  const [translationFailed, setTranslationFailed] = useState(false);
+  const [translationRetry, setTranslationRetry] = useState(0);
+  const [roomUnavailable, setRoomUnavailable] = useState(false);
+
   const [messageInput, setMessageInput] = useState("");
 
   const [translatedMessages, setTranslatedMessages] = useState<
-    Record<number, string>
+    Record<string, string>
   >({});
 
   const [
     translatedAnnouncements,
     setTranslatedAnnouncements,
-  ] = useState<Record<number, string>>({});
+  ] = useState<Record<string, string>>({});
 
   const [originalMessages, setOriginalMessages] = useState<
     Record<number, boolean>
@@ -460,9 +465,11 @@ export default function RoomPage() {
       return;
     }
 
+    const client = supabase;
+
     let active = true;
 
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let channel: ReturnType<typeof client.channel> | null = null;
 
     let syncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -498,7 +505,7 @@ export default function RoomPage() {
     }
 
     async function refreshMessages() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("messages")
         .select("*")
         .eq("room_id", roomId)
@@ -514,7 +521,7 @@ export default function RoomPage() {
     }
 
     async function refreshAnnouncements() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("announcements")
         .select("*")
         .eq("room_id", roomId)
@@ -530,7 +537,7 @@ export default function RoomPage() {
     }
 
     async function refreshParticipants() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("room_participants")
         .select("user_id,display_name,language")
         .eq("room_id", roomId);
@@ -543,7 +550,7 @@ export default function RoomPage() {
     }
 
     async function refreshReadCounts() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("announcement_reads")
         .select("announcement_id,user_id")
         .eq("room_id", roomId);
@@ -574,7 +581,7 @@ export default function RoomPage() {
     }
 
     async function refreshRoomStatus() {
-      const { data } = await supabase
+      const { data } = await client
         .from("rooms")
         .select("id,owner_id,status,event_id")
         .eq("id", roomId)
@@ -638,7 +645,7 @@ export default function RoomPage() {
       const {
         data: existingRoom,
         error: roomError,
-      } = await supabase
+      } = await client
         .from("rooms")
         .select("id,owner_id,status,event_id")
         .eq("id", roomId)
@@ -662,41 +669,13 @@ export default function RoomPage() {
         return;
       }
 
-      let resolvedOwner = existingRoom?.owner_id || "";
-
-      if (!existingRoom) {
-        const {
-          data: created,
-          error: createError,
-        } = await supabase
-          .from("rooms")
-          .insert({
-            id: roomId,
-            owner_id: senderId,
-            status: "active",
-          })
-          .select("id,owner_id,status,event_id")
-          .single();
-
-        if (createError) {
-          console.error("Room create error:", createError);
-        }
-
-        resolvedOwner = created?.owner_id || senderId;
-
-        if (created?.event_id) {
-          setRoomEventId(created.event_id);
-        }
-      } else if (!existingRoom.owner_id) {
-        await supabase
-          .from("rooms")
-          .update({
-            owner_id: senderId,
-          })
-          .eq("id", roomId);
-
-        resolvedOwner = senderId;
+      // A mistyped or stale invitation must never create a room or claim ownership.
+      if (roomError || !existingRoom || !existingRoom.owner_id) {
+        if (active) { setRoomUnavailable(true); setRoomLoading(false); }
+        return;
       }
+      const resolvedOwner = existingRoom.owner_id;
+      setRoomUnavailable(false);
 
       if (!active) {
         return;
@@ -704,7 +683,7 @@ export default function RoomPage() {
 
       setOwnerId(resolvedOwner);
 
-      const { error: participantError } = await supabase
+      const { error: participantError } = await client
         .from("room_participants")
         .upsert(
           {
@@ -737,7 +716,7 @@ export default function RoomPage() {
         return;
       }
 
-      channel = supabase.channel(`wyd-room-${roomId}`, {
+      channel = client.channel(`wyd-room-${roomId}`, {
         config: {
           presence: {
             key: senderId,
@@ -909,7 +888,7 @@ export default function RoomPage() {
 
       if (channel) {
         channel.untrack().catch(() => {});
-        supabase.removeChannel(channel);
+        client.removeChannel(channel);
       }
     };
   }, [
@@ -932,147 +911,26 @@ export default function RoomPage() {
     });
   }, [messages]);
 
-  // -------------------------------------
-  // MESSAGE TRANSLATION
-  // -------------------------------------
-
+  // Cache by content and target language so edits and language changes cannot
+  // reuse a stale translation. Each completed request updates independently.
   useEffect(() => {
     let cancelled = false;
-
-    async function translateMessages() {
-      for (const message of messages) {
-        if (
-          cancelled ||
-          roomEnded ||
-          !message.content ||
-          message.source_language === language ||
-          translatedMessages[message.id]
-        ) {
-          continue;
-        }
-
-        try {
-          const response = await fetch("/api/translate", {
-            method: "POST",
-
-            headers: {
-              "Content-Type": "application/json",
-            },
-
-            body: JSON.stringify({
-              text: message.content,
-              sourceLanguage: message.source_language,
-              targetLanguage: language,
-            }),
-          });
-
-          const raw = await response.text();
-
-          if (!response.ok || !raw) {
-            continue;
-          }
-
-          const data = JSON.parse(raw);
-
-          if (cancelled || !data?.translatedText) {
-            continue;
-          }
-
-          setTranslatedMessages((current) => ({
-            ...current,
-            [message.id]: data.translatedText,
-          }));
-        } catch (error) {
-          console.error(
-            "Message translation error:",
-            error
-          );
-        }
+    if (roomEnded) return;
+    setTranslationFailed(false);
+    for (const [items, update] of [
+      [messages, setTranslatedMessages],
+      [announcements, setTranslatedAnnouncements],
+    ] as const) {
+      for (const item of items) {
+        if (!item.content || item.source_language === language) continue;
+        const key = translationKey(item, language);
+        translateText(item.content, item.source_language, language).then((text) => {
+          if (!cancelled) update((current) => current[key] === text ? current : { ...current, [key]: text });
+        }).catch(() => { if (!cancelled) setTranslationFailed(true); });
       }
     }
-
-    translateMessages();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    messages,
-    language,
-    translatedMessages,
-    roomEnded,
-  ]);
-
-  // -------------------------------------
-  // ANNOUNCEMENT TRANSLATION
-  // -------------------------------------
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function translateAnnouncements() {
-      for (const announcement of announcements) {
-        if (
-          cancelled ||
-          roomEnded ||
-          !announcement.content ||
-          announcement.source_language === language ||
-          translatedAnnouncements[announcement.id]
-        ) {
-          continue;
-        }
-
-        try {
-          const response = await fetch("/api/translate", {
-            method: "POST",
-
-            headers: {
-              "Content-Type": "application/json",
-            },
-
-            body: JSON.stringify({
-              text: announcement.content,
-              sourceLanguage: announcement.source_language,
-              targetLanguage: language,
-            }),
-          });
-
-          const raw = await response.text();
-
-          if (!response.ok || !raw) {
-            continue;
-          }
-
-          const data = JSON.parse(raw);
-
-          if (cancelled || !data?.translatedText) {
-            continue;
-          }
-
-          setTranslatedAnnouncements((current) => ({
-            ...current,
-            [announcement.id]: data.translatedText,
-          }));
-        } catch (error) {
-          console.error(
-            "Announcement translation error:",
-            error
-          );
-        }
-      }
-    }
-
-    translateAnnouncements();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    announcements,
-    language,
-    translatedAnnouncements,
-    roomEnded,
-  ]);
+    return () => { cancelled = true; };
+  }, [messages, announcements, language, roomEnded, translationRetry]);
 
   // -------------------------------------
   // ANNOUNCEMENT READ
@@ -1414,7 +1272,7 @@ export default function RoomPage() {
       return message.content;
     }
 
-    return translatedMessages[message.id] || message.content;
+    return translatedMessages[translationKey(message, language)] || message.content;
   }
 
   function announcementText(
@@ -1428,7 +1286,7 @@ export default function RoomPage() {
     }
 
     return (
-      translatedAnnouncements[announcement.id] ||
+      translatedAnnouncements[translationKey(announcement, language)] ||
       announcement.content
     );
   }
@@ -1495,6 +1353,10 @@ export default function RoomPage() {
     );
   }
 
+  if (roomUnavailable) {
+    return <main className="grid min-h-[100dvh] place-items-center bg-[#fffefb] p-6 text-[#101820]"><div className="max-w-sm"><h1 className="text-2xl font-bold">{language === 'ko' ? '방에 입장할 수 없어요' : 'Unable to join this room'}</h1><p className="my-5 text-sm leading-6">{language === 'ko' ? '연결 상태와 초대 링크를 확인하거나 진행자에게 새 QR을 요청하세요.' : 'Check your connection and invitation, or ask your host for a new QR.'}</p><button onClick={() => window.location.reload()} className="rounded-full bg-[#101820] px-5 py-3 text-white">{language === 'ko' ? '다시 시도' : 'Retry'}</button><button onClick={() => router.push('/')} className="ml-4 px-4 py-3">{t.goHome}</button></div></main>;
+  }
+
   if (roomEnded && !roomLoading) {
     return (
       <main className="flex min-h-[100dvh] justify-center bg-[#f4f4f2] p-4 text-[#101820]">
@@ -1534,6 +1396,7 @@ export default function RoomPage() {
     <main className="h-[100dvh] bg-[#f4f4f2] text-[#101820]">
       <div className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#fffefb]">
 
+        {translationFailed && <div role="status" className="bg-amber-50 px-4 py-2 text-xs text-amber-900">{language === 'ko' ? '일부 번역을 불러오지 못해 원문을 표시합니다.' : 'Some translations are unavailable. Showing original text.'}<button onClick={() => setTranslationRetry((value) => value + 1)} className="ml-2 underline">{language === 'ko' ? '다시 번역' : 'Retry'}</button></div>}
         {/* HEADER */}
 
         <header className="shrink-0 border-b border-neutral-100 bg-[#fffefb]/95 px-4 pb-3 pt-4 backdrop-blur-xl">
@@ -1640,7 +1503,7 @@ export default function RoomPage() {
                 const mine = message.sender_id === senderId;
 
                 const translated =
-                  message.source_language !== language;
+                  message.source_language !== language && Boolean(translatedMessages[translationKey(message, language)]);
 
                 const showingOriginal =
                   !!originalMessages[message.id];
@@ -2010,7 +1873,7 @@ export default function RoomPage() {
             ) : (
               announcements.map((announcement) => {
                 const translated =
-                  announcement.source_language !== language;
+                  announcement.source_language !== language && Boolean(translatedAnnouncements[translationKey(announcement, language)]);
 
                 const showingOriginal =
                   !!originalAnnouncements[

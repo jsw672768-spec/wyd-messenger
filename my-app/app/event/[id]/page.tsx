@@ -1286,6 +1286,8 @@ export default function EventPage() {
     }
 
 
+    const client = supabase;
+
     let active =
       true;
 
@@ -1294,7 +1296,7 @@ export default function EventPage() {
       const {
         data,
         error,
-      } = await supabase
+      } = await client
         .from(
           "event_participants"
         )
@@ -1326,7 +1328,7 @@ export default function EventPage() {
       const {
         data,
         error,
-      } = await supabase
+      } = await client
         .from("rooms")
         .select(
           "id,event_id,name,room_type,country_code,sort_order,status"
@@ -1366,7 +1368,7 @@ export default function EventPage() {
       const {
         data: announcementData,
         error: announcementError,
-      } = await supabase
+      } = await client
         .from(
           "event_announcements"
         )
@@ -1398,7 +1400,7 @@ export default function EventPage() {
       const {
         data: readData,
         error: readError,
-      } = await supabase
+      } = await client
         .from(
           "event_announcement_reads"
         )
@@ -1427,7 +1429,7 @@ export default function EventPage() {
       const {
         data: scheduleData,
         error: scheduleError,
-      } = await supabase
+      } = await client
         .from(
           "event_schedule_items"
         )
@@ -1518,7 +1520,7 @@ export default function EventPage() {
       const {
         data: meetingData,
         error: meetingError,
-      } = await supabase
+      } = await client
         .from(
           "event_meeting_points"
         )
@@ -1588,7 +1590,7 @@ export default function EventPage() {
       const {
         data,
         error,
-      } = await supabase
+      } = await client
         .from("events")
         .select("*")
         .eq(
@@ -1644,7 +1646,7 @@ export default function EventPage() {
       const {
         error:
           participantError,
-      } = await supabase
+      } = await client
         .from(
           "event_participants"
         )
