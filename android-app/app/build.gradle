@@ -13,6 +13,7 @@ android {
         def site = (project.findProperty('wydSiteUrl') ?: System.getenv('WYD_SITE_URL') ?: '').toString()
         buildConfigField 'String', 'DEFAULT_SITE_URL', '"' + site.replace('\\', '\\\\').replace('"', '\\"') + '"'
     }
+    buildFeatures { buildConfig true }
     buildTypes {
         release { minifyEnabled false }
         debug { applicationIdSuffix '.debug'; versionNameSuffix '-debug' }
