@@ -12,6 +12,8 @@ try {
   const get = (path, options) => fetch(`http://127.0.0.1:4319${path}`, options);
   const home = await get('/'); assert.equal(home.status, 200);
   const html = await home.text(); assert.ok(html.includes('WYD Messenger')); assert.ok(html.includes('/manifest.webmanifest'));
+  const reader = await get('/message'); assert.equal(reader.status, 200);
+  const readerHtml = await reader.text(); assert.ok(readerHtml.includes('noindex')); assert.ok(readerHtml.includes('no-referrer')); assert.ok(readerHtml.includes('Opening your message'));
   const manifest = await (await get('/manifest.webmanifest')).json();
   assert.equal(manifest.display, 'standalone'); assert.equal(manifest.start_url, '/');
   for (const icon of manifest.icons) { const response = await get(icon.src); assert.equal(response.status, 200); assert.ok(response.headers.get('content-type').includes('image/png')); }
@@ -22,5 +24,5 @@ try {
   assert.equal((await post({ text: 'x', sourceLanguage: 'xx', targetLanguage: 'ko' })).status, 400);
   assert.equal((await post({ text: '가'.repeat(4000), sourceLanguage: 'en', targetLanguage: 'ko' })).status, 413);
   const same = await post({ text: '안녕', sourceLanguage: 'ko', targetLanguage: 'ko' }); assert.equal(same.status, 200); assert.equal((await same.json()).translatedText, '안녕');
-  console.log('Production smoke checks passed: home, manifest, icons, SW, offline page, API validation and same-language response.');
+  console.log('Production smoke checks passed: home, shared-message route, manifest, icons, SW, offline page, API validation and same-language response.');
 } finally { server.kill('SIGTERM'); }
