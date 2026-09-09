@@ -248,8 +248,8 @@ const copy: Record<
     noAnnouncements:
       "No event announcements yet.",
 
-    confirmed: "Confirmed",
-    unconfirmed: "Not confirmed",
+    confirmed: "Read",
+    unconfirmed: "Not read",
     viewDetails: "View details",
 
     countryRooms: "Country rooms",
@@ -419,8 +419,8 @@ const copy: Record<
     noAnnouncements:
       "아직 전체 공지가 없습니다.",
 
-    confirmed: "확인",
-    unconfirmed: "미확인",
+    confirmed: "읽음",
+    unconfirmed: "읽지 않음",
     viewDetails: "자세히 보기",
 
     countryRooms:
@@ -614,10 +614,10 @@ const copy: Record<
       "No hay anuncios.",
 
     confirmed:
-      "Confirmado",
+      "Leído",
 
     unconfirmed:
-      "Sin confirmar",
+      "No leído",
 
     viewDetails:
       "Ver detalles",

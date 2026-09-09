@@ -46,7 +46,7 @@ export default function Home() {
           </section>
           <JoinByLink language={language}/>
           <section className="wyd-event-card"><span className="wyd-icon-tile"><Icon name="plus"/></span><div><h2>{ko ? '함께할 행사 만들기' : es ? 'Crea tu evento' : 'Bring your event together'}</h2><p>{ko ? '공지, 일정, 채팅을 한 공간에서.' : es ? 'Anuncios, horarios y chat en un solo lugar.' : 'Announcements, schedules, and chat in one place.'}</p></div><button type="button" className="wyd-event-button" aria-label={ko ? '행사 만들기' : 'Create event'} onClick={() => setShowEvent(true)}><Icon name="arrow"/></button></section>
-          {!eventConfigured && <p className="wyd-event-status">{ko ? '행사·실시간 채팅은 연결 준비 중이에요.' : es ? 'Los eventos y el chat esperan la configuración.' : 'Events and live chat are awaiting setup.'}</p>}
+          {!eventConfigured && <p className="wyd-event-status">{ko ? '행사·채팅·자동 번역은 연결 준비 중이에요. QR 메시지는 원문으로 전달할 수 있어요.' : es ? 'Los eventos, el chat y la traducción esperan la configuración. Puedes compartir el texto original por QR.' : 'Events, chat and translation are awaiting setup. You can share original messages by QR.'}</p>}
         </div>
         <MessageComposer language={language}/>
       </div>

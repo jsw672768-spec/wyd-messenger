@@ -11,7 +11,11 @@ try {
   });
   const get = (path, options) => fetch(`http://127.0.0.1:4319${path}`, options);
   const home = await get('/'); assert.equal(home.status, 200);
+  assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(home.headers.get('referrer-policy'), 'no-referrer');
   const html = await home.text(); assert.ok(html.includes('WYD Messenger')); assert.ok(html.includes('/manifest.webmanifest'));
+  const health = await get('/api/health'); assert.equal(health.status, 503);
+  const healthBody = await health.json(); assert.equal(healthBody.configured, false); assert.equal(healthBody.dependencies, 'not_probed');
   const reader = await get('/message'); assert.equal(reader.status, 200);
   const readerHtml = await reader.text(); assert.ok(readerHtml.includes('noindex')); assert.ok(readerHtml.includes('no-referrer')); assert.ok(readerHtml.includes('Opening your message'));
   const manifest = await (await get('/manifest.webmanifest')).json();

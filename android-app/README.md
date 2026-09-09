@@ -1,20 +1,23 @@
-# WYD Messenger for Android
+# WYD Messenger Android
 
-This is a native Android WebView host for the existing Next.js application in `my-app`. It is not an offline replacement for the server. It preserves the existing QR-first event, announcement, schedule, meeting-point, and chat UI. The Android project can be opened in Android Studio or built with Gradle and JDK 17.
+기존 웹앱을 연결하는 네이티브 WebView 앱입니다. 아이콘·시작 설정 화면, 신뢰한 HTTPS 사이트의 QR 카메라 권한, 안전한 외부 링크, 공유, 뒤로가기, 네트워크 복구, 키보드·화면 여백 대응을 포함합니다.
 
-## Install a development APK
+## 빌드
 
-Open the GitHub Actions workflow **Android APK**, run it on the feature branch, and download the `WYD-Messenger-Android-debug` artifact. Extract the ZIP and install `app-debug.apk` on an Android 8.0+ device. The APK is a development build signed by the Android debug key, not a Play Store release. Different build machines may have different debug keys, so uninstall an older debug build if Android reports a signature mismatch. Uninstalling can erase locally stored app data.
+JDK 17, Gradle 8.11.1, Android SDK 플랫폼 36과 빌드 도구를 준비하고 android-app에서 gradle --no-daemon testDebugUnitTest assembleDebug lintDebug를 실행합니다. 결과는 app/build/outputs/apk/debug/app-debug.apk입니다. 최소 Android 8(API 26), 대상 Android 16(API 36)입니다.
 
-At first launch, enter the HTTPS origin of your running WYD website. If using Codespaces, run `cd /workspaces/wyd-messenger/my-app && npm run dev -- --hostname 0.0.0.0 --port 3000`, make port 3000 public, and copy its HTTPS forwarded URL into the app. Codespaces is temporary, so use a stable deployment for a real event. The same server must have the Supabase configuration and translation API available. Never enter service-role keys into the app.
+테스트 패키지는 org.wyd.messenger.debug, 정식 패키지는 org.wyd.messenger입니다. WYD_SITE_URL 또는 wydSiteUrl Gradle 속성에 안정적인 HTTPS origin을 설정합니다. 비어 있으면 주소 설정 화면으로 시작합니다. Codespaces를 최종 서비스 주소로 사용하지 않습니다.
 
-For a preconfigured build, set repository variable `WYD_SITE_URL` or pass `site_url` to the workflow. The URL must be an HTTPS origin, without paths, queries, credentials, or fragments. The app can still change its server in Settings. QR links use the existing web application paths. Native `wyd://event/ID` and `wyd://room/ID` links are supported. Ordinary HTTPS links are not claimed as verified Android App Links; domain verification requires control of the deployed domain and an assetlinks.json file.
+## 검사와 배포
 
-## Build locally
+- Android verification: PR 빌드·단위 검사·lint·aapt/apksigner/zipalign와 API 26/36 설치·네이티브 실행을 검사합니다. 임시 CI 서명 결과는 반복 배포용이 아닙니다. 과거 APK 진단은 원래 아티팩트가 남아 있을 때만 수동으로 선택합니다.
+- Android managed test distribution: 영구 테스트 서명과 승인된 HTTPS 주소를 요구하는 수동 배포입니다. 같은 APK의 두 API 설치 검사가 모두 통과한 뒤 WYD-managed-APK-install-verified 아티팩트를 생성합니다. 후보 아티팩트는 설치 검증 완료본이 아닙니다.
+- 정식 앱은 별도 정식 키로 배포합니다. 키를 공개 저장소에 넣지 않습니다. Play 배포는 아직 구성되지 않았습니다.
 
-Install Android SDK platform 35, build tools, JDK 17 and Gradle 8.11.1. From `android-app`, run `gradle testDebugUnitTest assembleDebug`. The APK is produced at `app/build/outputs/apk/debug/app-debug.apk`. Android Studio can also import the project and generate a signed release after you configure your own signing key. Never commit a release keystore or its passwords.
+android-distribution 환경에는 WYD_DEBUG_KEYSTORE_BASE64, WYD_DEBUG_STORE_PASSWORD, WYD_DEBUG_KEY_ALIAS, WYD_DEBUG_KEY_PASSWORD 비밀값과 WYD_DEBUG_CERT_SHA256 변수가 필요합니다. **환경 보호와 키는 아직 계정에 설정하지 않았습니다.** 키가 없으면 중단하고 임시 키로 배포하지 않습니다. 키는 실행 중 임시 경로에서만 복원해 마지막에 지웁니다. 버전 번호는 이전 배포보다 커야 합니다. 첫 관리 배포 이후에는 이전 관리 APK에 대한 업데이트 검사도 추가해야 합니다.
 
-## Limitations
+서명 충돌 시 기존 앱을 무조건 삭제하지 마세요. 익명 신원·방장 세션을 잃을 수 있습니다. [설치 조사·Galaxy Tab 확인](../docs/ANDROID_INSTALL.md)에 전달 파일의 정확한 지문과 증거를 기록했습니다.
 
-The native shell does not bundle a Next.js server or a translation model. Camera access is granted only to the configured HTTPS origin and only for video capture. External links are opened outside the WebView. The existing website's database permissions, translation quotas, reliability and privacy controls still require production verification. No push-notification service, offline synchronization, iOS binary, or store release is included. Use the development APK for testing, not as proof of production readiness.
+## 남은 확인
 
+Samsung 실기기, 실제 카메라·공유 대상·키보드, 운영 WebView 인증·전체 행사 흐름은 미검증입니다. HTTPS는 아직 검증된 Android App Links가 아닙니다. 도메인과 정식 서명 확정 후 assetlinks.json을 설정합니다. 푸시·오프라인 동기화·스토어 등록은 미구현입니다.

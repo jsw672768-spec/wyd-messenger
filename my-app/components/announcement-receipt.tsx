@@ -4,8 +4,8 @@ import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
 /** A receipt is created only after the on-screen notice reaches the reader.
  * Confirmation is a separate explicit action; neither depends on translation. */
-export default function AnnouncementReceipt({ scope, id, parentId, userId, language }: {
-  scope: 'event' | 'room'; id: number; parentId: string; userId: string; language: string;
+export default function AnnouncementReceipt({ scope, id, parentId, userId, language, onConfirmed }: {
+  onConfirmed?: () => void; scope: 'event' | 'room'; id: number; parentId: string; userId: string; language: string;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -45,7 +45,7 @@ export default function AnnouncementReceipt({ scope, id, parentId, userId, langu
     try {
       const result = await db.rpc('acknowledge_wyd_announcement', { p_scope: scope, p_announcement_id: id });
       if (result.error) throw result.error;
-      setConfirmed(true);
+      setConfirmed(true); onConfirmed?.();
     } catch { setError(language === 'ko' ? '확인 상태를 저장하지 못했어요. 다시 눌러주세요.' : 'Confirmation was not saved. Please retry.'); }
     finally { setBusy(false); }
   }
