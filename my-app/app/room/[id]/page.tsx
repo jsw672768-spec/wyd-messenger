@@ -10,7 +10,8 @@ import {
 } from "react";
 
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
+import { translateText, translationKey } from "@/lib/translation-client";
 import { QRCodeSVG } from "qrcode.react";
 
 type Message = {
@@ -277,22 +278,13 @@ export default function RoomPage() {
     ? rawId[0]
     : String(rawId || "");
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!url || !key) {
-      return null;
-    }
-
-    return createClient(url, key);
-  }, []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const [splash, setSplash] = useState(true);
 
-  const [senderId, setSenderId] = useState("");
+  const { senderId } = useWydIdentity();
   const [displayName, setDisplayName] = useState("");
   const [language, setLanguage] = useState("en");
 
@@ -333,16 +325,24 @@ export default function RoomPage() {
     Record<number, number>
   >({});
 
+  const [translationFailed, setTranslationFailed] = useState(false);
+  const [translationRetry, setTranslationRetry] = useState(0);
+  const [roomUnavailable, setRoomUnavailable] = useState(false);
+
   const [messageInput, setMessageInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const sendLock = useRef(false);
+  const submission = useRef<{ id: string; content: string; language: string } | null>(null);
 
   const [translatedMessages, setTranslatedMessages] = useState<
-    Record<number, string>
+    Record<string, string>
   >({});
 
   const [
     translatedAnnouncements,
     setTranslatedAnnouncements,
-  ] = useState<Record<number, string>>({});
+  ] = useState<Record<string, string>>({});
 
   const [originalMessages, setOriginalMessages] = useState<
     Record<number, boolean>
@@ -411,15 +411,7 @@ export default function RoomPage() {
     const savedLanguage = localStorage.getItem("wyd_language");
     const savedName = localStorage.getItem("wyd_display_name");
 
-    let savedSenderId = localStorage.getItem("wyd_sender_id");
-
-    if (!savedSenderId) {
-      savedSenderId = crypto.randomUUID();
-
-      localStorage.setItem("wyd_sender_id", savedSenderId);
-    }
-
-    setSenderId(savedSenderId);
+    
 
     if (savedLanguage) {
       setLanguage(savedLanguage);
@@ -460,9 +452,11 @@ export default function RoomPage() {
       return;
     }
 
+    const client = supabase;
+
     let active = true;
 
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let channel: ReturnType<typeof client.channel> | null = null;
 
     let syncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -498,23 +492,21 @@ export default function RoomPage() {
     }
 
     async function refreshMessages() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("messages")
         .select("*")
         .eq("room_id", roomId)
-        .order("created_at", {
-          ascending: true,
-        });
+        .order("created_at", { ascending: false }).limit(100);
 
       if (!active || error || !data) {
         return;
       }
 
-      setMessages(data as Message[]);
+      setMessages((data as Message[]).reverse());
     }
 
     async function refreshAnnouncements() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("announcements")
         .select("*")
         .eq("room_id", roomId)
@@ -530,7 +522,7 @@ export default function RoomPage() {
     }
 
     async function refreshParticipants() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("room_participants")
         .select("user_id,display_name,language")
         .eq("room_id", roomId);
@@ -543,7 +535,7 @@ export default function RoomPage() {
     }
 
     async function refreshReadCounts() {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("announcement_reads")
         .select("announcement_id,user_id")
         .eq("room_id", roomId);
@@ -574,7 +566,7 @@ export default function RoomPage() {
     }
 
     async function refreshRoomStatus() {
-      const { data } = await supabase
+      const { data } = await client
         .from("rooms")
         .select("id,owner_id,status,event_id")
         .eq("id", roomId)
@@ -635,10 +627,12 @@ export default function RoomPage() {
     async function initialize() {
       setRoomLoading(true);
 
+      const joined = await client.rpc('join_wyd_room', { p_room_id: roomId, p_display_name: displayName, p_language: language });
+      if (joined.error) { if (active) { setRoomUnavailable(true); setRoomLoading(false); } return; }
       const {
         data: existingRoom,
         error: roomError,
-      } = await supabase
+      } = await client
         .from("rooms")
         .select("id,owner_id,status,event_id")
         .eq("id", roomId)
@@ -662,69 +656,19 @@ export default function RoomPage() {
         return;
       }
 
-      let resolvedOwner = existingRoom?.owner_id || "";
-
-      if (!existingRoom) {
-        const {
-          data: created,
-          error: createError,
-        } = await supabase
-          .from("rooms")
-          .insert({
-            id: roomId,
-            owner_id: senderId,
-            status: "active",
-          })
-          .select("id,owner_id,status,event_id")
-          .single();
-
-        if (createError) {
-          console.error("Room create error:", createError);
-        }
-
-        resolvedOwner = created?.owner_id || senderId;
-
-        if (created?.event_id) {
-          setRoomEventId(created.event_id);
-        }
-      } else if (!existingRoom.owner_id) {
-        await supabase
-          .from("rooms")
-          .update({
-            owner_id: senderId,
-          })
-          .eq("id", roomId);
-
-        resolvedOwner = senderId;
+      // A mistyped or stale invitation must never create a room or claim ownership.
+      if (roomError || !existingRoom || !existingRoom.owner_id) {
+        if (active) { setRoomUnavailable(true); setRoomLoading(false); }
+        return;
       }
+      const resolvedOwner = existingRoom.owner_id;
+      setRoomUnavailable(false);
 
       if (!active) {
         return;
       }
 
       setOwnerId(resolvedOwner);
-
-      const { error: participantError } = await supabase
-        .from("room_participants")
-        .upsert(
-          {
-            room_id: roomId,
-            user_id: senderId,
-            display_name: displayName,
-            language,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: "room_id,user_id",
-          }
-        );
-
-      if (participantError) {
-        console.error(
-          "Participant save error:",
-          participantError
-        );
-      }
 
       await Promise.all([
         refreshMessages(),
@@ -737,8 +681,9 @@ export default function RoomPage() {
         return;
       }
 
-      channel = supabase.channel(`wyd-room-${roomId}`, {
+      channel = client.channel(`wyd-room-${roomId}`, {
         config: {
+          private: true,
           presence: {
             key: senderId,
           },
@@ -812,7 +757,7 @@ export default function RoomPage() {
           },
           (payload) => {
             const deletedId = Number(
-              (payload.old as any)?.id
+              (payload.old as { id?: number })?.id
             );
 
             setAnnouncements((current) =>
@@ -909,7 +854,7 @@ export default function RoomPage() {
 
       if (channel) {
         channel.untrack().catch(() => {});
-        supabase.removeChannel(channel);
+        client.removeChannel(channel);
       }
     };
   }, [
@@ -932,147 +877,26 @@ export default function RoomPage() {
     });
   }, [messages]);
 
-  // -------------------------------------
-  // MESSAGE TRANSLATION
-  // -------------------------------------
-
+  // Cache by content and target language so edits and language changes cannot
+  // reuse a stale translation. Each completed request updates independently.
   useEffect(() => {
     let cancelled = false;
-
-    async function translateMessages() {
-      for (const message of messages) {
-        if (
-          cancelled ||
-          roomEnded ||
-          !message.content ||
-          message.source_language === language ||
-          translatedMessages[message.id]
-        ) {
-          continue;
-        }
-
-        try {
-          const response = await fetch("/api/translate", {
-            method: "POST",
-
-            headers: {
-              "Content-Type": "application/json",
-            },
-
-            body: JSON.stringify({
-              text: message.content,
-              sourceLanguage: message.source_language,
-              targetLanguage: language,
-            }),
-          });
-
-          const raw = await response.text();
-
-          if (!response.ok || !raw) {
-            continue;
-          }
-
-          const data = JSON.parse(raw);
-
-          if (cancelled || !data?.translatedText) {
-            continue;
-          }
-
-          setTranslatedMessages((current) => ({
-            ...current,
-            [message.id]: data.translatedText,
-          }));
-        } catch (error) {
-          console.error(
-            "Message translation error:",
-            error
-          );
-        }
+    if (roomEnded) return;
+    setTranslationFailed(false);
+    for (const [items, update] of [
+      [messages, setTranslatedMessages],
+      [announcements, setTranslatedAnnouncements],
+    ] as const) {
+      for (const item of items) {
+        if (!item.content || item.source_language === language) continue;
+        const key = translationKey(item, language);
+        translateText(item.content, item.source_language, language).then((text) => {
+          if (!cancelled) update((current) => current[key] === text ? current : { ...current, [key]: text });
+        }).catch(() => { if (!cancelled) setTranslationFailed(true); });
       }
     }
-
-    translateMessages();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    messages,
-    language,
-    translatedMessages,
-    roomEnded,
-  ]);
-
-  // -------------------------------------
-  // ANNOUNCEMENT TRANSLATION
-  // -------------------------------------
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function translateAnnouncements() {
-      for (const announcement of announcements) {
-        if (
-          cancelled ||
-          roomEnded ||
-          !announcement.content ||
-          announcement.source_language === language ||
-          translatedAnnouncements[announcement.id]
-        ) {
-          continue;
-        }
-
-        try {
-          const response = await fetch("/api/translate", {
-            method: "POST",
-
-            headers: {
-              "Content-Type": "application/json",
-            },
-
-            body: JSON.stringify({
-              text: announcement.content,
-              sourceLanguage: announcement.source_language,
-              targetLanguage: language,
-            }),
-          });
-
-          const raw = await response.text();
-
-          if (!response.ok || !raw) {
-            continue;
-          }
-
-          const data = JSON.parse(raw);
-
-          if (cancelled || !data?.translatedText) {
-            continue;
-          }
-
-          setTranslatedAnnouncements((current) => ({
-            ...current,
-            [announcement.id]: data.translatedText,
-          }));
-        } catch (error) {
-          console.error(
-            "Announcement translation error:",
-            error
-          );
-        }
-      }
-    }
-
-    translateAnnouncements();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    announcements,
-    language,
-    translatedAnnouncements,
-    roomEnded,
-  ]);
+    return () => { cancelled = true; };
+  }, [messages, announcements, language, roomEnded, translationRetry]);
 
   // -------------------------------------
   // ANNOUNCEMENT READ
@@ -1122,31 +946,22 @@ export default function RoomPage() {
     event.preventDefault();
 
     const content = messageInput.trim();
-
-    if (!supabase || !content || roomEnded) {
-      return;
+    if (!supabase || !senderId || !content || roomEnded || sendLock.current) return;
+    if (content.length > 3000) { setSendError(language === 'ko' ? '메시지는 3,000자 이내로 입력해주세요.' : 'Keep messages within 3,000 characters.'); return; }
+    if (!submission.current || submission.current.content !== content || submission.current.language !== language) {
+      submission.current = { id: crypto.randomUUID(), content, language };
     }
-
-    setMessageInput("");
-
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
-        room_id: roomId,
-        sender_id: senderId,
-        content,
-        source_language: language,
-      })
-      .select("*")
-      .single();
-
+    sendLock.current = true; setSending(true); setSendError('');
+    const { data, error } = await supabase.rpc('send_wyd_message', {
+      p_room_id: roomId, p_client_message_id: submission.current.id,
+      p_content: content, p_source_language: language,
+    }).single();
+    sendLock.current = false; setSending(false);
     if (error) {
-      console.error("Send message error:", error);
-
-      setMessageInput(content);
+      setSendError(language === 'ko' ? '전송을 확인하지 못했어요. 다시 전송해도 같은 메시지는 한 번만 저장돼요.' : 'Delivery could not be confirmed. Retry safely; the same message is saved only once.');
       return;
     }
-
+    submission.current = null; setMessageInput('');
     if (data) {
       const savedMessage = data as Message;
 
@@ -1391,6 +1206,8 @@ export default function RoomPage() {
       return displayName;
     }
 
+    const stored = participantDirectory.find((participant) => participant.user_id === id);
+    if (stored) return stored.display_name;
     const online = onlineParticipants.find(
       (participant) => participant.user_id === id
     );
@@ -1399,11 +1216,7 @@ export default function RoomPage() {
       return online.display_name;
     }
 
-    const stored = participantDirectory.find(
-      (participant) => participant.user_id === id
-    );
-
-    return stored?.display_name || "Guest";
+    return "Guest";
   }
 
   function messageText(message: Message) {
@@ -1414,7 +1227,7 @@ export default function RoomPage() {
       return message.content;
     }
 
-    return translatedMessages[message.id] || message.content;
+    return translatedMessages[translationKey(message, language)] || message.content;
   }
 
   function announcementText(
@@ -1428,7 +1241,7 @@ export default function RoomPage() {
     }
 
     return (
-      translatedAnnouncements[announcement.id] ||
+      translatedAnnouncements[translationKey(announcement, language)] ||
       announcement.content
     );
   }
@@ -1495,6 +1308,10 @@ export default function RoomPage() {
     );
   }
 
+  if (roomUnavailable) {
+    return <main className="grid min-h-[100dvh] place-items-center bg-[#fffefb] p-6 text-[#101820]"><div className="max-w-sm"><h1 className="text-2xl font-bold">{language === 'ko' ? '방에 입장할 수 없어요' : 'Unable to join this room'}</h1><p className="my-5 text-sm leading-6">{language === 'ko' ? '연결 상태와 초대 링크를 확인하거나 진행자에게 새 QR을 요청하세요.' : 'Check your connection and invitation, or ask your host for a new QR.'}</p><button onClick={() => window.location.reload()} className="rounded-full bg-[#101820] px-5 py-3 text-white">{language === 'ko' ? '다시 시도' : 'Retry'}</button><button onClick={() => router.push('/')} className="ml-4 px-4 py-3">{t.goHome}</button></div></main>;
+  }
+
   if (roomEnded && !roomLoading) {
     return (
       <main className="flex min-h-[100dvh] justify-center bg-[#f4f4f2] p-4 text-[#101820]">
@@ -1534,6 +1351,7 @@ export default function RoomPage() {
     <main className="h-[100dvh] bg-[#f4f4f2] text-[#101820]">
       <div className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#fffefb]">
 
+        {translationFailed && <div role="status" className="bg-amber-50 px-4 py-2 text-xs text-amber-900">{language === 'ko' ? '일부 번역을 불러오지 못해 원문을 표시합니다.' : 'Some translations are unavailable. Showing original text.'}<button onClick={() => setTranslationRetry((value) => value + 1)} className="ml-2 underline">{language === 'ko' ? '다시 번역' : 'Retry'}</button></div>}
         {/* HEADER */}
 
         <header className="shrink-0 border-b border-neutral-100 bg-[#fffefb]/95 px-4 pb-3 pt-4 backdrop-blur-xl">
@@ -1640,7 +1458,7 @@ export default function RoomPage() {
                 const mine = message.sender_id === senderId;
 
                 const translated =
-                  message.source_language !== language;
+                  message.source_language !== language && Boolean(translatedMessages[translationKey(message, language)]);
 
                 const showingOriginal =
                   !!originalMessages[message.id];
@@ -1711,11 +1529,13 @@ export default function RoomPage() {
           )}
         </section>
 
+        {sendError && <p role="alert" className="border-t border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{sendError}</p>}
         {/* INPUT */}
 
         <div className="shrink-0 border-t border-neutral-100 bg-[#fffefb] px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
           <form
             onSubmit={sendMessage}
+            aria-busy={sending}
             className="flex items-end gap-2"
           >
             <button
@@ -1737,6 +1557,9 @@ export default function RoomPage() {
             <div className="flex min-h-11 flex-1 items-center rounded-[22px] bg-[#f4f4f2] px-4">
               <input
                 value={messageInput}
+                maxLength={3000}
+                disabled={sending}
+                aria-label={t.messagePlaceholder}
                 onChange={(event) =>
                   setMessageInput(event.target.value)
                 }
@@ -1747,7 +1570,7 @@ export default function RoomPage() {
 
             <button
               type="submit"
-              disabled={!messageInput.trim()}
+              disabled={sending || !messageInput.trim() || !senderId}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2868d8] text-[20px] text-white disabled:bg-neutral-200"
             >
               ↑
@@ -2010,7 +1833,7 @@ export default function RoomPage() {
             ) : (
               announcements.map((announcement) => {
                 const translated =
-                  announcement.source_language !== language;
+                  announcement.source_language !== language && Boolean(translatedAnnouncements[translationKey(announcement, language)]);
 
                 const showingOriginal =
                   !!originalAnnouncements[

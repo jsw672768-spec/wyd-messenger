@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WYD Messenger
 
-## Getting Started
+QR로 행사에 참여하고 메시지·공지·일정·집결 장소를 확인하는 Next.js 앱입니다. HTTPS로 실행하면 Android/iOS 홈 화면에 설치할 수 있습니다. APK나 앱스토어 배포본은 아닙니다.
 
-First, run the development server:
+## 실행
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Node.js 22.18 이상을 사용합니다. `npm ci` 후 `.env.example`을 `.env.local`로 복사하고 기존 Supabase 프로젝트 URL과 anon 키를 입력합니다. `npm run dev`로 개발하거나 `npm run build`와 `npm start`로 운영합니다. 공개 환경 변수는 빌드 전에 설정해야 합니다. service_role 키를 클라이언트 변수에 넣지 마세요.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 이번 변경
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 번역 홈페이지와 QR 메시지 전달
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- 첫 화면에 QR 스캔과 메시지 작성을 배치하고, 휴대폰·태블릿·PC에 맞게 표시합니다. WYD 시작 화면은 첫 방문에 짧게 표시하고, 화면 언어는 기기 설정을 기본값으로 사용합니다.
+- 작성 언어와 내용을 입력하고 번역 미리보기를 확인한 뒤 메시지 QR/링크를 생성합니다. 상대방은 `/message` 화면에서 지원하는 10개 언어 중 읽을 언어를 선택합니다. 이 흐름은 Supabase 없이 사용할 수 있습니다.
+- 메시지 내용은 URL의 `#` 뒤에 포함합니다. 앱 서버에 원문을 저장하지 않으며, 번역 시에는 기존 MyMemory API에 전송합니다. QR 또는 링크를 가진 사람은 내용을 읽을 수 있습니다. 공유한 링크는 수정·회수·만료할 수 없고 보낸 이름은 인증된 신원이 아닙니다.
+- QR 크기를 제한하기 위해 메시지는 유니코드 코드 포인트 기준 240자, 보낸 이름은 30자로 제한합니다. 손상된 링크, 지원하지 않는 언어, 과도한 데이터는 거부합니다. 기존 행사·방 QR 경로도 계속 지원합니다.
+- 언어를 바꾸면 이전 언어의 결과를 표시하지 않으며, 번역 중·실패 시 원문을 유지합니다. 실패 후 다시 번역할 수 있습니다.
+- 기존 행사·공지·일정·채팅 기능은 보존했습니다. 연결 설정이 없는 환경에서는 행사/채팅 준비 상태를 명시합니다.
 
-## Learn More
+### 이전 작업에서 이어받은 앱·번역 수정
 
-To learn more about Next.js, take a look at the following resources:
+- 기존 화면·행사 데이터 흐름을 유지하면서 앱 이름, 아이콘, 설치 안내, manifest, safe-area를 추가했습니다.
+- QR을 스캔할 수 없는 경우 초대 링크를 붙여넣어 입장할 수 있습니다.
+- 오프라인에서는 연결 안내가 나타납니다. 메시지·공지·인증 페이지를 서비스 워커 캐시에 저장하지 않습니다. 오프라인 전송/번역이나 백그라운드 푸시 알림을 제공하지 않습니다.
+- 번역을 내용·언어별로 중복 제거하고 제한된 동시 요청으로 처리합니다. 수정된 공지와 다른 언어에 이전 번역을 재사용하지 않습니다. 실패 시 원문 표시와 재시도를 제공합니다.
+- 번역 제공자의 오류/할당량 응답을 번역문으로 저장하지 않습니다. 긴 텍스트의 UTF-8 분할, 최대 입력 크기, 요청 시간 제한을 적용했습니다.
+- 번역 캐시는 서버 메모리 10분/500개, 브라우저 메모리 300개로 제한합니다. 기존 공개 translation_cache 테이블에 원문을 쓰거나 그 테이블의 값을 신뢰하지 않습니다. 서버 재시작·다른 인스턴스에서는 다시 번역하며, MyMemory 제공자의 사용량 제한은 여전히 적용됩니다.
+- 존재하지 않는 방에 접근했다고 새 방을 만들거나 소유권을 부여하지 않습니다.
+- 기존 코드의 nullable 클라이언트/알림 참조로 발생하던 빌드 오류를 수정했습니다.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 검증
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`node --test tests/*.test.mjs`로 UTF-8, 초대 링크, 번역 중복 제거·순서·동시 요청 상한·오류 후 재시도를 검사합니다. `npm run build` 후 `node tests/smoke.mjs`로 실제 운영 서버의 페이지, manifest, 아이콘, 서비스 워커와 번역 API 입력 검증을 확인합니다.
 
-## Deploy on Vercel
+## 실제 행사 운영 전에 남은 확인
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+이 저장소에는 기존 Supabase 테이블 정의, RLS 정책, RPC 정의, 프로젝트 설정이 없습니다. 이번 작업 환경에서는 실제 프로젝트에 접속하지 못했습니다. 테이블을 임의로 새로 만들거나 기존 데이터를 변경하지 않았습니다.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+현재 기존 코드는 브라우저에 저장된 `wyd_sender_id`를 작성자/진행자 식별자로 사용합니다. 이것만으로는 서버에서 사용자를 인증할 수 없습니다. 실제 Supabase 정책에서 일반 참가자의 공지 수정, 다른 참가자 사칭, 행사 종료를 막는지 확인해야 하며, 필요하면 기존 행사 소유권을 보존하는 인증 이전 작업이 필요합니다. UI의 `isOwner` 검사는 데이터베이스 접근 제어를 대체하지 않습니다.
+
+배포 전에는 기존 데이터베이스 연결과 권한을 확인한 뒤 서로 다른 두 기기에서 QR 참여 → 메시지 송수신 → 공지 수정/번역 → 참가자 권한 → 행사 종료를 검증해야 합니다. 브라우저 카메라·홈 화면 설치·실제 외부 번역은 이 환경에서 검증하지 않았습니다. 아직 운영 배포하거나 앱스토어에 제출하지 않았습니다.

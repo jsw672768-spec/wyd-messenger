@@ -13,9 +13,7 @@ import {
   useRouter,
 } from "next/navigation";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
 
 import {
   QRCodeSVG,
@@ -768,27 +766,7 @@ export default function EventPage() {
       : String(rawId || "");
 
 
-  const supabase =
-    useMemo(() => {
-      const url =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_URL;
-
-      const key =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-
-      if (!url || !key) {
-        return null;
-      }
-
-
-      return createClient(
-        url,
-        key
-      );
-    }, []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
 
   const [
@@ -899,10 +877,7 @@ export default function EventPage() {
   ] = useState(false);
 
 
-  const [
-    senderId,
-    setSenderId,
-  ] = useState("");
+  const { senderId } = useWydIdentity();
 
 
   const [
@@ -1218,27 +1193,7 @@ export default function EventPage() {
       );
 
 
-    let savedSenderId =
-      localStorage.getItem(
-        "wyd_sender_id"
-      );
-
-
-    if (!savedSenderId) {
-      savedSenderId =
-        crypto.randomUUID();
-
-
-      localStorage.setItem(
-        "wyd_sender_id",
-        savedSenderId
-      );
-    }
-
-
-    setSenderId(
-      savedSenderId
-    );
+    
 
 
     if (savedLanguage) {
@@ -1286,6 +1241,8 @@ export default function EventPage() {
     }
 
 
+    const client = supabase;
+
     let active =
       true;
 
@@ -1294,7 +1251,7 @@ export default function EventPage() {
       const {
         data,
         error,
-      } = await supabase
+      } = await client
         .from(
           "event_participants"
         )
@@ -1326,7 +1283,7 @@ export default function EventPage() {
       const {
         data,
         error,
-      } = await supabase
+      } = await client
         .from("rooms")
         .select(
           "id,event_id,name,room_type,country_code,sort_order,status"
@@ -1366,7 +1323,7 @@ export default function EventPage() {
       const {
         data: announcementData,
         error: announcementError,
-      } = await supabase
+      } = await client
         .from(
           "event_announcements"
         )
@@ -1398,7 +1355,7 @@ export default function EventPage() {
       const {
         data: readData,
         error: readError,
-      } = await supabase
+      } = await client
         .from(
           "event_announcement_reads"
         )
@@ -1427,7 +1384,7 @@ export default function EventPage() {
       const {
         data: scheduleData,
         error: scheduleError,
-      } = await supabase
+      } = await client
         .from(
           "event_schedule_items"
         )
@@ -1518,7 +1475,7 @@ export default function EventPage() {
       const {
         data: meetingData,
         error: meetingError,
-      } = await supabase
+      } = await client
         .from(
           "event_meeting_points"
         )
@@ -1585,10 +1542,12 @@ export default function EventPage() {
       );
 
 
+      const joined = await client.rpc('join_wyd_event', { p_event_id: eventId, p_display_name: displayName, p_language: language });
+      if (joined.error) { if (active) { setNotFound(true); setLoading(false); } return; }
       const {
         data,
         error,
-      } = await supabase
+      } = await client
         .from("events")
         .select("*")
         .eq(
@@ -1630,58 +1589,6 @@ export default function EventPage() {
       setEventData(
         event
       );
-
-
-      const role:
-        | "participant"
-        | "organizer" =
-        event.owner_id ===
-        senderId
-          ? "organizer"
-          : "participant";
-
-
-      const {
-        error:
-          participantError,
-      } = await supabase
-        .from(
-          "event_participants"
-        )
-        .upsert(
-          {
-            event_id:
-              eventId,
-
-            user_id:
-              senderId,
-
-            display_name:
-              displayName,
-
-            language,
-
-            role,
-
-            updated_at:
-              new Date()
-                .toISOString(),
-          },
-          {
-            onConflict:
-              "event_id,user_id",
-          }
-        );
-
-
-      if (
-        participantError
-      ) {
-        console.error(
-          "Event participant error:",
-          participantError
-        );
-      }
 
 
       await Promise.all([
@@ -2228,10 +2135,7 @@ export default function EventPage() {
           "-",
           ""
         )
-        .slice(
-          0,
-          10
-        );
+        ;
 
 
     const nextSortOrder =
@@ -2370,10 +2274,7 @@ export default function EventPage() {
           "-",
           ""
         )
-        .slice(
-          0,
-          10
-        );
+        ;
 
 
     const nextSortOrder =

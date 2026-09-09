@@ -13,9 +13,8 @@ import {
   useRouter,
 } from "next/navigation";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import AuthStatus from '@/components/auth-status';
+import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
 
 
 type HelpAlert = {
@@ -71,27 +70,7 @@ export default function Template({
     usePathname();
 
 
-  const supabase =
-    useMemo(() => {
-      const url =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_URL;
-
-      const key =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-
-      if (!url || !key) {
-        return null;
-      }
-
-
-      return createClient(
-        url,
-        key
-      );
-    }, []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
 
   const audioContextRef =
@@ -100,10 +79,7 @@ export default function Template({
     );
 
 
-  const [
-    senderId,
-    setSenderId,
-  ] = useState("");
+  const { senderId } = useWydIdentity();
 
 
   const [
@@ -273,10 +249,7 @@ export default function Template({
   // =====================================
 
   useEffect(() => {
-    const id =
-      localStorage.getItem(
-        "wyd_sender_id"
-      );
+    
 
 
     const savedLanguage =
@@ -285,11 +258,7 @@ export default function Template({
       );
 
 
-    if (id) {
-      setSenderId(
-        id
-      );
-    }
+    
 
 
     if (savedLanguage) {
@@ -805,6 +774,7 @@ export default function Template({
 
 
     function systemNotification() {
+      if (!currentHelpAlert) return;
       try {
         if (
           !(
@@ -1188,6 +1158,8 @@ export default function Template({
     };
   }, [
     currentAnnouncement?.id,
+    currentAnnouncement?.content,
+    currentAnnouncement?.source_language,
     language,
   ]);
 
@@ -1569,6 +1541,7 @@ export default function Template({
   return (
     <>
 
+      <AuthStatus />
       {children}
 
 

@@ -13,9 +13,7 @@ import {
   useRouter,
 } from "next/navigation";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
 
 
 type EventData = {
@@ -233,27 +231,7 @@ export default function MeetingPage() {
       : String(rawId || "");
 
 
-  const supabase =
-    useMemo(() => {
-      const url =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_URL;
-
-      const key =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-
-      if (!url || !key) {
-        return null;
-      }
-
-
-      return createClient(
-        url,
-        key
-      );
-    }, []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
 
   const [
@@ -278,10 +256,7 @@ export default function MeetingPage() {
   );
 
 
-  const [
-    senderId,
-    setSenderId,
-  ] = useState("");
+  const { senderId } = useWydIdentity();
 
 
   const [
@@ -361,10 +336,7 @@ export default function MeetingPage() {
   // ===================================
 
   useEffect(() => {
-    const savedId =
-      localStorage.getItem(
-        "wyd_sender_id"
-      );
+    
 
 
     const savedLanguage =
@@ -373,11 +345,7 @@ export default function MeetingPage() {
       );
 
 
-    if (savedId) {
-      setSenderId(
-        savedId
-      );
-    }
+    
 
 
     if (savedLanguage) {
