@@ -1,7 +1,6 @@
 package org.wyd.messenger;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -20,7 +19,7 @@ public final class UrlPolicy {
             String path = uri.getRawPath();
             if (path != null && !path.isEmpty() && !"/".equals(path)) return null;
             return new URI("https", null, uri.getHost().toLowerCase(Locale.ROOT),
-                    uri.getPort(), null, null, null).toASCIIString();
+                    uri.getPort() == 443 ? -1 : uri.getPort(), null, null, null).toASCIIString();
         } catch (Exception ignored) { return null; }
     }
 
@@ -31,7 +30,7 @@ public final class UrlPolicy {
                     || uri.getUserInfo() != null || uri.getPort() > 65535 || uri.getPort() == 0)
                 return null;
             return new URI("https", null, uri.getHost().toLowerCase(Locale.ROOT),
-                    uri.getPort(), null, null, null).toASCIIString();
+                    uri.getPort() == 443 ? -1 : uri.getPort(), null, null, null).toASCIIString();
         } catch (Exception ignored) { return null; }
     }
 
@@ -56,7 +55,7 @@ public final class UrlPolicy {
             if (parts.length != 3 || !("event".equals(parts[1]) || "room".equals(parts[1]))
                     || !ID.matcher(parts[2]).matches()) return null;
             return "/" + parts[1] + "/" + parts[2];
-        } catch (URISyntaxException ignored) { return null; }
+        } catch (Exception ignored) { return null; }
     }
 
     public static String resolveInvite(String site, String invite) {
@@ -65,3 +64,4 @@ public final class UrlPolicy {
         return origin != null && path != null ? origin + path : null;
     }
 }
+

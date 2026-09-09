@@ -27,4 +27,14 @@ public class UrlPolicyTest {
         assertNull(UrlPolicy.internalPath("https://old.example/room/abc?x=1"));
         assertEquals("https://new.example/event/abc", UrlPolicy.resolveInvite("https://new.example", "wyd://event/abc"));
     }
+    @Test public void canonicalizesDefaultHttpsPort() {
+        assertTrue(UrlPolicy.isInternal("https://wyd.example:443", "https://wyd.example/event/test"));
+        assertFalse(UrlPolicy.isInternal("https://wyd.example", "https://wyd.example:444/"));
+    }
+    @Test public void rejectsNullAndExecutableInvites() {
+        assertNull(UrlPolicy.internalPath(null));
+        assertNull(UrlPolicy.internalPath("javascript:alert(1)"));
+        assertNull(UrlPolicy.resolveInvite("https://wyd.example", "wyd://event/../admin"));
+    }
 }
+

@@ -17,3 +17,4 @@ Install Android SDK platform 35, build tools, JDK 17 and Gradle 8.11.1. From `an
 ## Limitations
 
 The native shell does not bundle a Next.js server or a translation model. Camera access is granted only to the configured HTTPS origin and only for video capture. External links are opened outside the WebView. The existing website's database permissions, translation quotas, reliability and privacy controls still require production verification. No push-notification service, offline synchronization, iOS binary, or store release is included. Use the development APK for testing, not as proof of production readiness.
+

@@ -5,6 +5,7 @@ import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.*;
 import android.view.*;
@@ -23,29 +24,34 @@ public class MainActivity extends Activity {
     private android.content.SharedPreferences prefs;
     private int dp(int n) { return (int)(n*getResources().getDisplayMetrics().density+.5f); }
     private TextView text(String s, int size) { TextView t=new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(Color.rgb(16,24,32)); return t; }
-    private LinearLayout column() { LinearLayout l=new LinearLayout(this); l.setOrientation(1); l.setPadding(dp(24),dp(24),dp(24),dp(24)); return l; }
+    private LinearLayout column() { LinearLayout l=new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(dp(24),dp(24),dp(24),dp(24)); return l; }
     private void add(LinearLayout l,View v,int h) { l.addView(v,new LinearLayout.LayoutParams(-1,h<0?h:dp(h))); }
     private Button button(String s) { Button b=new Button(this); b.setText(s); b.setAllCaps(false); b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(255,212,59))); return b; }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(PAPER); getWindow().setNavigationBarColor(PAPER);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | (Build.VERSION.SDK_INT >= 27 ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
+        if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
         prefs=getSharedPreferences("wyd_settings",MODE_PRIVATE);
         site=UrlPolicy.normalizeSite(prefs.getString("site",BuildConfig.DEFAULT_SITE_URL));
         invite=inviteFrom(getIntent());
         root=new FrameLayout(this); root.setBackgroundColor(PAPER); setContentView(root);
-        if(Build.VERSION.SDK_INT>=35) root.setOnApplyWindowInsetsListener((v,i)->{
-            android.graphics.Insets b=i.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+        if(Build.VERSION.SDK_INT>=30) {
+            getWindow().setDecorFitsSystemWindows(false);
+            root.setOnApplyWindowInsetsListener((v,i)->{
+            android.graphics.Insets b=i.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout()|WindowInsets.Type.ime());
             v.setPadding(b.left,b.top,b.right,b.bottom); return i;
-        });
+            });
+            root.requestApplyInsets();
+        }
         if(site==null) setup(); else browser(state);
     }
-    private void clear() { if(web!=null){ web.stopLoading(); web.setWebChromeClient(null); web.setWebViewClient(null); web.destroy(); web=null; } root.removeAllViews(); content=null; }
+    private void clear() { denyCamera(); if(web!=null){ web.stopLoading(); web.setWebChromeClient(null); web.setWebViewClient(null); web.destroy(); web=null; } root.removeAllViews(); content=null; }
     private void setup() {
         clear(); ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); LinearLayout form=column(); scroll.addView(form); root.addView(scroll);
-        TextView logo=text("WYD.",48); logo.setTypeface(null,1); add(form,logo,-2);
+        TextView logo=text("WYD.",48); logo.setTypeface(null,Typeface.BOLD); add(form,logo,-2);
         add(form,text("Messenger",26),-2);
-        TextView info=text("언어의 벽을 넘어, 마음을 전하세요.\n\n기존 WYD 웹앱의 HTTPS 주소를 입력하세요. Codespaces의 포트 3000 주소도 사용할 수 있습니다. 채팅과 번역을 이용하려면 서버가 실행 중이어야 합니다.",15);
+        TextView info=text("언어의 벽을 넘어, 마음을 전하세요.\n\n행사 운영자가 전달한 WYD 서비스 주소를 입력하세요. 채팅과 번역에는 인터넷 연결이 필요합니다. 아직 서비스 주소를 받지 않았다면 운영자에게 문의해주세요.",15);
         info.setPadding(0,dp(16),0,dp(20)); add(form,info,-2);
         EditText input=new EditText(this); input.setSingleLine(true); input.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_URI); input.setText(site==null?"":site); input.setHint("https://your-wyd-app.example.com"); add(form,input,56);
         TextView error=text("",13); error.setTextColor(Color.RED); add(form,error,-2);
@@ -56,16 +62,16 @@ public class MainActivity extends Activity {
     }
     private void browser(Bundle state) {
         if(site==null){setup();return;} clear();
-        LinearLayout shell=new LinearLayout(this); shell.setOrientation(1); root.addView(shell,new FrameLayout.LayoutParams(-1,-1));
+        LinearLayout shell=new LinearLayout(this); shell.setOrientation(LinearLayout.VERTICAL); root.addView(shell,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout bar=new LinearLayout(this); bar.setGravity(Gravity.CENTER_VERTICAL); bar.setPadding(dp(16),0,dp(8),0); add(shell,bar,48);
-        TextView logo=text("WYD.",22); logo.setTypeface(null,1); logo.setGravity(Gravity.CENTER_VERTICAL); bar.addView(logo,new LinearLayout.LayoutParams(0,dp(48),1)); logo.setOnClickListener(v->home());
-        TextView menu=text("⋮",28); menu.setGravity(Gravity.CENTER); bar.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48))); menu.setOnClickListener(this::menu);
+        TextView logo=text("WYD.",22); logo.setTypeface(null,Typeface.BOLD); logo.setGravity(Gravity.CENTER_VERTICAL); bar.addView(logo,new LinearLayout.LayoutParams(0,dp(48),1)); logo.setOnClickListener(v->home());
+        TextView menu=text("⋮",28); menu.setContentDescription("WYD 메뉴"); menu.setGravity(Gravity.CENTER); bar.addView(menu,new LinearLayout.LayoutParams(dp(48),dp(48))); menu.setOnClickListener(this::menu);
         content=new FrameLayout(this); shell.addView(content,new LinearLayout.LayoutParams(-1,0,1));
         web=new WebView(this); WebSettings s=web.getSettings(); s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setAllowFileAccess(false); s.setAllowContentAccess(false); s.setAllowFileAccessFromFileURLs(false); s.setAllowUniversalAccessFromFileURLs(false); s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW); s.setJavaScriptCanOpenWindowsAutomatically(false); s.setSupportMultipleWindows(false); s.setSafeBrowsingEnabled(true);
         CookieManager.getInstance().setAcceptCookie(true); CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){return navigate(r.getUrl().toString());}
-            @Override public void onPageStarted(WebView v,String u,android.graphics.Bitmap icon){progress.setVisibility(View.VISIBLE);}
+            @Override public void onPageStarted(WebView v,String u,android.graphics.Bitmap icon){denyCamera(); dismissError(); progress.setVisibility(View.VISIBLE);}
             @Override public void onPageFinished(WebView v,String u){progress.setVisibility(View.GONE);}
             @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame())connectionError();}
             @Override public void onReceivedHttpError(WebView v,WebResourceRequest r,WebResourceResponse e){if(r.isForMainFrame()&&e.getStatusCode()>=500)connectionError();}
@@ -87,10 +93,16 @@ public class MainActivity extends Activity {
     private void requestCamera(PermissionRequest r){
         if(!UrlPolicy.isInternal(site,r.getOrigin().toString())){r.deny();return;}
         boolean video=false;for(String resource:r.getResources())if(PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource))video=true;
-        if(!video){r.deny();return;}cameraRequest=r;
+        if(!video){r.deny();return;}denyCamera(); cameraRequest=r;
         if(checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)grantCamera();else requestPermissions(new String[]{Manifest.permission.CAMERA},CAMERA);
     }
-    private void grantCamera(){if(cameraRequest!=null){cameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});cameraRequest=null;}}
+    private void denyCamera(){if(cameraRequest!=null){cameraRequest.deny();cameraRequest=null;}}
+    private void grantCamera(){
+        if(cameraRequest==null)return;
+        if(web==null || !UrlPolicy.isInternal(site,web.getUrl()) || !UrlPolicy.isInternal(site,cameraRequest.getOrigin().toString())){denyCamera();return;}
+        cameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});cameraRequest=null;
+    }
+    private void dismissError(){if(content!=null)for(int i=content.getChildCount()-1;i>=0;i--)if("error".equals(content.getChildAt(i).getTag()))content.removeViewAt(i);}
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==CAMERA&&cameraRequest!=null){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)grantCamera();else{cameraRequest.deny();cameraRequest=null;}}}
     private void connectionError(){
         if(content==null||web==null)return;
@@ -112,7 +124,9 @@ public class MainActivity extends Activity {
     }
     private String inviteFrom(Intent intent){if(intent==null||intent.getData()==null)return null;String u=intent.getDataString();return UrlPolicy.internalPath(u)==null?null:u;}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);String u=inviteFrom(intent);if(u!=null){if(site==null){invite=u;setup();}else if(web!=null)web.loadUrl(UrlPolicy.resolveInvite(site,u));else{invite=u;browser(null);}}}
-    @Override public void onBackPressed(){if(web!=null&&web.canGoBack())web.goBack();else if(web!=null)new AlertDialog.Builder(this).setMessage("WYD Messenger를 종료할까요?").setNegativeButton("취소",null).setPositiveButton("종료",(d,w)->finish()).show();else super.onBackPressed();}
+    @Override public void onBackPressed(){handleBack();}
+    private void handleBack(){if(web!=null&&web.canGoBack())web.goBack();else if(web!=null)new AlertDialog.Builder(this).setMessage("WYD Messenger를 종료할까요?").setNegativeButton("취소",null).setPositiveButton("종료",(d,w)->finish()).show();else finish();}
     @Override protected void onSaveInstanceState(Bundle state){if(web!=null)web.saveState(state);super.onSaveInstanceState(state);}
     @Override protected void onDestroy(){if(cameraRequest!=null){cameraRequest.deny();cameraRequest=null;}clear();super.onDestroy();}
 }
+
