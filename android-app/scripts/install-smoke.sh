@@ -9,6 +9,7 @@ adb shell getprop > "$report/device-properties.txt"
 adb logcat -c > "$report/log-clear.txt" 2>&1 || printf 'Emulator log buffer could not be cleared; retaining prior entries.\n' >> "$report/log-clear.txt"
 package=org.wyd.messenger.debug
 component="$package/org.wyd.messenger.MainActivity"
+if test -f "$apk_dir/original/app-debug.apk" && test -f "$apk_dir/previous-verification/app-debug.apk"; then
 adb install "$apk_dir/original/app-debug.apk" 2>&1 | tee "$report/original-install.txt"
 adb shell am start -W -n "$component" | tee "$report/original-launch.txt"
 grep -q 'Status: ok' "$report/original-launch.txt"
@@ -20,6 +21,7 @@ set -e
 test "$update_status" -ne 0
 grep -q 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' "$report/original-update.txt"
 adb uninstall "$package" > "$report/emulator-cleanup.txt"
+fi
 adb install "$apk_dir/current/WYD-Messenger-debug.apk" 2>&1 | tee "$report/current-install.txt"
 adb shell am start -W -n "$component" | tee "$report/current-launch.txt"
 grep -q 'Status: ok' "$report/current-launch.txt"
@@ -41,5 +43,5 @@ if grep -A6 'FATAL EXCEPTION' "$report/logcat.txt" | grep -q "$package"; then
   echo 'A fatal exception was recorded; inspect logcat before distributing.'
   exit 1
 fi
-printf 'Original and current APKs installed and native setup launched; independent debug-signature conflict reproduced. Web service and physical devices not tested here.\n' > "$report/RESULT.txt"
+printf 'Current APK installed and native activity launched. Historical signature evidence is included only when original fixtures are supplied. Web service and physical devices not tested here.\n' > "$report/RESULT.txt"
 

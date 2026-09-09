@@ -3,6 +3,14 @@ on:
   pull_request:
     paths: ['android-app/**', '.github/workflows/android-check.yml']
   workflow_dispatch:
+    inputs:
+      include_historical:
+        description: 'Repeat original APK diagnosis while its artifacts remain available'
+        type: boolean
+        default: false
+defaults:
+  run:
+    shell: bash
 permissions:
   contents: read
   actions: read
@@ -26,20 +34,22 @@ jobs:
       - name: Build and run unit tests
         working-directory: android-app
         run: gradle --no-daemon testDebugUnitTest assembleDebug lintDebug
-      - name: Retrieve both original APKs for diagnosis
+      - name: Verify the current build
+        run: |
+          mkdir -p evidence/current evidence/tools
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk evidence/current/WYD-Messenger-debug.apk
+          bash android-app/scripts/verify-apk.sh evidence/current/WYD-Messenger-debug.apk evidence/current
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" evidence/tools/
+      - name: Optional historical APK diagnosis
+        if: inputs.include_historical == true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p evidence/original evidence/previous-verification evidence/current evidence/tools
+          mkdir -p evidence/original evidence/previous-verification
           gh run download 34119222754 --repo jsw672768-spec/wyd-messenger --name WYD-Messenger-Android-debug --dir evidence/original
           gh run download 34119266220 --repo jsw672768-spec/wyd-messenger --name WYD-Messenger-Android-debug --dir evidence/previous-verification
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk evidence/current/WYD-Messenger-debug.apk
-      - name: Verify manifest, integrity, signature and alignment
-        run: |
           bash android-app/scripts/verify-apk.sh evidence/original/app-debug.apk evidence/original
           bash android-app/scripts/verify-apk.sh evidence/previous-verification/app-debug.apk evidence/previous-verification
-          bash android-app/scripts/verify-apk.sh evidence/current/WYD-Messenger-debug.apk evidence/current
-          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" evidence/tools/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -68,7 +78,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Install originals, reproduce signature conflict, and launch current build
+      - name: Install and launch the exact current APK
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: ${{ matrix.api }}
