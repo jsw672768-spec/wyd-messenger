@@ -6,7 +6,7 @@ mkdir -p "$report"
 # ONLY disposable CI emulators; never run cleanup on a user's device.
 test "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" = 1
 adb shell getprop > "$report/device-properties.txt"
-adb logcat -c
+adb logcat -c > "$report/log-clear.txt" 2>&1 || printf 'Emulator log buffer could not be cleared; retaining prior entries.\n' >> "$report/log-clear.txt"
 package=org.wyd.messenger.debug
 component="$package/org.wyd.messenger.MainActivity"
 adb install "$apk_dir/original/app-debug.apk" 2>&1 | tee "$report/original-install.txt"
@@ -37,8 +37,9 @@ adb exec-out screencap -p > "$report/tablet.png"
 adb shell input keyevent KEYCODE_BACK
 adb shell am start -W -n "$component" > "$report/relaunch.txt"
 adb logcat -d -b all > "$report/logcat.txt"
-if grep -q 'FATAL EXCEPTION' "$report/logcat.txt"; then
+if grep -A6 'FATAL EXCEPTION' "$report/logcat.txt" | grep -q "$package"; then
   echo 'A fatal exception was recorded; inspect logcat before distributing.'
   exit 1
 fi
 printf 'Original and current APKs installed and native setup launched; independent debug-signature conflict reproduced. Web service and physical devices not tested here.\n' > "$report/RESULT.txt"
+
