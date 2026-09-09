@@ -8,11 +8,12 @@ import MessageComposer from '@/components/message-composer';
 import QrScanner from '@/components/qr-scanner';
 import CreateEvent from '@/components/create-event';
 import { Brand, Icon, LanguageSelect } from '@/components/wyd-ui';
-import { preferredLanguage, saveLanguage } from '@/lib/languages';
+import { saveLanguage } from '@/lib/languages';
+import { usePreferredLanguage } from '@/lib/use-preferred-language';
 
 export default function Home() {
   const router = useRouter();
-  const [language, setLanguage] = useState('ko');
+  const [language, setLanguage] = usePreferredLanguage('ko');
   const [ready, setReady] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showEvent, setShowEvent] = useState(false);
@@ -20,8 +21,6 @@ export default function Home() {
   const es = language === 'es';
   const eventConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   useEffect(() => {
-    const initial = preferredLanguage();
-    setLanguage(initial); saveLanguage(initial);
     let seen = false;
     try { seen = sessionStorage.getItem('wyd_welcome_seen') === '1'; sessionStorage.setItem('wyd_welcome_seen', '1'); } catch {}
     const timer = setTimeout(() => setReady(true), seen || window.location.hash ? 0 : 650);

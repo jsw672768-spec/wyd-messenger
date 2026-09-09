@@ -1,22 +1,21 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { decodeMessage, type SharedMessage } from '@/lib/message-link';
-import { languageName, preferredLanguage, readerCopy, saveLanguage } from '@/lib/languages';
+import { useMemo, useSyncExternalStore } from 'react';
+import { decodeMessage } from '@/lib/message-link';
+import { languageName, readerCopy, saveLanguage } from '@/lib/languages';
 import { Brand, Icon, LanguageSelect } from '@/components/wyd-ui';
+import { usePreferredLanguage } from '@/lib/use-preferred-language';
 import TranslatedMessage from '@/components/translated-message';
 
 export default function MessageReader() {
-  const [message, setMessage] = useState<SharedMessage | null>(null);
-  const [language, setLanguage] = useState('en');
-  const [ready, setReady] = useState(false);
+  const [language, setLanguage] = usePreferredLanguage();
+  const hash = useSyncExternalStore(callback => {
+    window.addEventListener('hashchange', callback);
+    return () => window.removeEventListener('hashchange', callback);
+  }, () => window.location.hash, () => null);
+  const ready = hash !== null;
+  const message = useMemo(() => hash ? decodeMessage(hash.slice(1)) : null, [hash]);
   const t = readerCopy(language);
-  useEffect(() => {
-    const initial = preferredLanguage(); setLanguage(initial); saveLanguage(initial);
-    const read = () => { setMessage(decodeMessage(window.location.hash.slice(1))); setReady(true); };
-    read(); window.addEventListener('hashchange', read);
-    return () => window.removeEventListener('hashchange', read);
-  }, []);
   return <main className="wyd-home wyd-reader"><div className="wyd-reader-shell">
     <header className="wyd-header"><Brand/><Link href="/" className="wyd-home-link">{t.home}</Link></header>
     {!ready ? <div className="wyd-card wyd-reader-card"><p className="wyd-translation-status" role="status"><span className="wyd-spinner"/>{t.opening}</p></div> : !message ? <section className="wyd-card wyd-reader-card"><span className="wyd-icon-tile"><Icon name="link"/></span><h1>{t.invalidTitle}</h1><p className="wyd-muted">{t.invalidBody}</p><Link href="/" className="wyd-button wyd-button-primary">{t.home}</Link></section> : <>

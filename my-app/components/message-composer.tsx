@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useSyncExternalStore, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { MAX_MESSAGE_CHARACTERS, MAX_SENDER_CHARACTERS, messagePath } from '@/lib/message-link';
 import { languageName } from '@/lib/languages';
@@ -17,11 +17,10 @@ export default function MessageComposer({ language }: { language: string }) {
   const [shareUrl, setShareUrl] = useState('');
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
-  const [canShare, setCanShare] = useState(false);
+  const canShare = useSyncExternalStore(() => () => {}, () => typeof navigator.share === 'function', () => false);
   const linkRef = useRef<HTMLInputElement>(null);
   const size = Array.from(text).length;
   const valid = Boolean(text.trim()) && size <= MAX_MESSAGE_CHARACTERS && Array.from(sender).length <= MAX_SENDER_CHARACTERS;
-  useEffect(() => { setCanShare(typeof navigator.share === 'function'); }, []);
   function createQr() {
     if (!valid) return;
     try {

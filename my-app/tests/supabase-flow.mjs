@@ -17,10 +17,19 @@ async function subscription(client, room, onMessage) {
   const channel=client.channel(`wyd-room-${room}`, {config:{ private:true, presence:{ key:randomUUID() } }});
   channels.push([client,channel]);
   channel.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`room_id=eq.${room}`},onMessage);
-  await deadline(new Promise((resolve,reject)=>channel.subscribe(status=>{
-    if(status==='SUBSCRIBED')resolve();
-    if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')reject(Error(status));
-  })), 'Realtime subscription');
+  await deadline(new Promise((resolve,reject)=>{
+    let joined=false, listening=false;
+    const ready=()=>{ if(joined && listening)resolve(); };
+    channel.on('system',{},payload=>{
+      if(payload.extension==='postgres_changes') {
+        if(payload.status==='ok'){listening=true;ready();}
+        else reject(Error('Replication listener unavailable: '+payload.message));
+      }
+    }).subscribe(status=>{
+      if(status==='SUBSCRIBED'){joined=true;ready();}
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')reject(Error(status));
+    });
+  }), 'Realtime replication readiness');
   return channel;
 }
 try {

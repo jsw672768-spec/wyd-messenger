@@ -1,4 +1,8 @@
 "use client";
+import { usePreferredLanguage } from "@/lib/use-preferred-language";
+import { useEventRole } from "@/lib/use-event-role";
+import { useTranslation } from "@/lib/use-translation";
+import TranslationStatus from "@/components/translation-status";
 
 import {
   useEffect,
@@ -259,22 +263,13 @@ export default function MeetingPage() {
   const { senderId } = useWydIdentity();
 
 
-  const [
-    language,
-    setLanguage,
-  ] = useState("en");
+  const [language] = usePreferredLanguage();
 
 
-  const [
-    translatedDetails,
-    setTranslatedDetails,
-  ] = useState("");
+  
 
 
-  const [
-    translationLoading,
-    setTranslationLoading,
-  ] = useState(false);
+  
 
 
   const [
@@ -324,65 +319,17 @@ export default function MeetingPage() {
     copy.en;
 
 
-  const isOrganizer =
-    !!eventData &&
-    !!senderId &&
-    eventData.owner_id ===
-      senderId;
+  const { canManage: isOrganizer } = useEventRole(eventId, senderId);
 
 
   // ===================================
   // PROFILE
   // ===================================
 
-  useEffect(() => {
-    
+  
 
 
-    const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
-
-
-    
-
-
-    if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
-    }
-  }, []);
-
-
-  useEffect(() => {
-    const timer =
-      setInterval(() => {
-        const savedLanguage =
-          localStorage.getItem(
-            "wyd_language"
-          );
-
-
-        if (
-          savedLanguage &&
-          savedLanguage !==
-            language
-        ) {
-          setLanguage(
-            savedLanguage
-          );
-        }
-      }, 1000);
-
-
-    return () => {
-      clearInterval(
-        timer
-      );
-    };
-  }, [language]);
+  
 
 
   // ===================================
@@ -392,6 +339,7 @@ export default function MeetingPage() {
   useEffect(() => {
     if (
       !supabase ||
+      !senderId ||
       !eventId
     ) {
       return;
@@ -564,175 +512,18 @@ export default function MeetingPage() {
   }, [
     supabase,
     eventId,
+    senderId,
   ]);
 
 
   // ===================================
+  const meetingResult = useTranslation(meeting?.details || '', meeting?.source_language || '', language);
+  const translatedDetails = meetingResult.text;
+
   // TRANSLATION
   // ===================================
 
-  useEffect(() => {
-    const details =
-      meeting?.details ||
-      "";
-
-
-    const sourceLanguage =
-      meeting?.source_language ||
-      "";
-
-
-    setShowOriginal(
-      false
-    );
-
-
-    if (!details) {
-      setTranslatedDetails(
-        ""
-      );
-
-
-      setTranslationLoading(
-        false
-      );
-
-
-      return;
-    }
-
-
-    if (
-      sourceLanguage ===
-      language
-    ) {
-      setTranslatedDetails(
-        ""
-      );
-
-
-      setTranslationLoading(
-        false
-      );
-
-
-      return;
-    }
-
-
-    let cancelled =
-      false;
-
-
-    async function translate() {
-      setTranslationLoading(
-        true
-      );
-
-
-      try {
-        const response =
-          await fetch(
-            "/api/translate",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  text:
-                    details,
-
-                  sourceLanguage,
-
-                  targetLanguage:
-                    language,
-                }),
-            }
-          );
-
-
-        const raw =
-          await response.text();
-
-
-        if (cancelled) {
-          return;
-        }
-
-
-        if (
-          !response.ok ||
-          !raw
-        ) {
-          setTranslationLoading(
-            false
-          );
-
-
-          return;
-        }
-
-
-        const data =
-          JSON.parse(
-            raw
-          );
-
-
-        if (cancelled) {
-          return;
-        }
-
-
-        if (
-          data?.translatedText
-        ) {
-          setTranslatedDetails(
-            data.translatedText
-          );
-        }
-
-
-        setTranslationLoading(
-          false
-        );
-      } catch (
-        error
-      ) {
-        if (
-          !cancelled
-        ) {
-          console.error(
-            "Meeting point translation error:",
-            error
-          );
-
-
-          setTranslationLoading(
-            false
-          );
-        }
-      }
-    }
-
-
-    translate();
-
-
-    return () => {
-      cancelled =
-        true;
-    };
-  }, [
-    meeting?.details,
-    meeting?.source_language,
-    language,
-  ]);
+  
 
 
   // ===================================
@@ -1417,24 +1208,10 @@ export default function MeetingPage() {
                 )}
 
 
-                {translationLoading &&
-                  isTranslated &&
-                  !translatedDetails && (
-
-                  <div className="mt-4 flex items-center gap-2">
-
-                    <div className="h-3 w-3 animate-spin rounded-full border border-neutral-200 border-t-[#2868d8]" />
-
-                    <p className="text-[9px] text-neutral-400">
-                      Translating...
-                    </p>
-
-                  </div>
-
-                )}
+                <TranslationStatus status={meetingResult.status} language={language} retry={meetingResult.retry} />
 
 
-                {isTranslated && (
+                {isTranslated && meetingResult.status === "translated" && (
 
                   <button
                     onClick={() =>

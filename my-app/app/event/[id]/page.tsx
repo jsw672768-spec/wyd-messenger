@@ -1,4 +1,7 @@
 "use client";
+import { useEventRole } from "@/lib/use-event-role";
+import { useTranslation } from "@/lib/use-translation";
+import TranslationStatus from "@/components/translation-status";
 
 import {
   useEffect,
@@ -92,6 +95,7 @@ type AnnouncementRead = {
   announcement_id: number;
   user_id: string;
   read_at: string;
+  acknowledged_at: string | null;
 };
 
 
@@ -847,22 +851,13 @@ export default function EventPage() {
   );
 
 
-  const [
-    translatedScheduleTitle,
-    setTranslatedScheduleTitle,
-  ] = useState("");
+  
 
 
-  const [
-    translatedScheduleDescription,
-    setTranslatedScheduleDescription,
-  ] = useState("");
+  
 
 
-  const [
-    translatedMeetingDetails,
-    setTranslatedMeetingDetails,
-  ] = useState("");
+  
 
 
   const [
@@ -1053,11 +1048,7 @@ export default function EventPage() {
     copy.en;
 
 
-  const isOrganizer =
-    !!eventData &&
-    !!senderId &&
-    eventData.owner_id ===
-      senderId;
+  const { canManage: isOrganizer } = useEventRole(eventId, senderId);
 
 
   const eventUrl =
@@ -1141,6 +1132,10 @@ export default function EventPage() {
   }
 
 
+  function confirmedCount(announcementId: number) {
+    return announcementReads.filter(read => read.announcement_id === announcementId && read.acknowledged_at).length;
+  }
+
   function readCount(
     announcementId: number
   ) {
@@ -1197,6 +1192,7 @@ export default function EventPage() {
 
 
     if (savedLanguage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the saved name/language once after SSR; these browser preferences are never an authorization source.
       setLanguage(
         savedLanguage
       );
@@ -1247,6 +1243,10 @@ export default function EventPage() {
       true;
 
 
+    async function refreshEventStatus() {
+      const result = await client.from('events').select('*').eq('id', eventId).maybeSingle();
+      if (active && !result.error && result.data) setEventData(result.data as EventData);
+    }
     async function refreshParticipants() {
       const {
         data,
@@ -1360,7 +1360,7 @@ export default function EventPage() {
           "event_announcement_reads"
         )
         .select(
-          "announcement_id,user_id,read_at"
+          "announcement_id,user_id,read_at,acknowledged_at"
         )
         .eq(
           "event_id",
@@ -1610,17 +1610,25 @@ export default function EventPage() {
     initialize();
 
 
+    let refreshing = false;
+    const refreshAll = async () => {
+      if (!active || refreshing || document.visibilityState === 'hidden') return;
+      refreshing = true;
+      try { await Promise.all([refreshEventStatus(), refreshRooms(), refreshParticipants(), refreshAnnouncementStats(), refreshEventTools()]); }
+      finally { refreshing = false; }
+    };
+    const channel = client.channel(`wyd-event-summary-${eventId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'event_announcements', filter: `event_id=eq.${eventId}` }, refreshAll).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events', filter: `id=eq.${eventId}` }, refreshAll).on('system', {}, payload => { if (payload.extension === 'postgres_changes' && payload.status === 'ok') void refreshAll(); }).subscribe();
+    window.addEventListener('online', refreshAll);
+    document.addEventListener('visibilitychange', refreshAll);
     const timer =
-      setInterval(() => {
-        refreshRooms();
-        refreshParticipants();
-        refreshAnnouncementStats();
-        refreshEventTools();
-      }, 3000);
+      setInterval(refreshAll, 15000);
 
 
     return () => {
       active = false;
+      window.removeEventListener('online', refreshAll);
+      document.removeEventListener('visibilitychange', refreshAll);
+      void client.removeChannel(channel);
 
 
       clearInterval(
@@ -1639,273 +1647,23 @@ export default function EventPage() {
 
 
   // ===================================
+  const scheduleTitleResult = useTranslation(nextSchedule?.title || '', nextSchedule?.source_language || '', language);
+  const scheduleDescriptionResult = useTranslation(nextSchedule?.description || '', nextSchedule?.source_language || '', language);
+  const meetingResult = useTranslation(meetingPoint?.details || '', meetingPoint?.source_language || '', language);
+  const translatedScheduleTitle = scheduleTitleResult.text;
+  const translatedScheduleDescription = scheduleDescriptionResult.text;
+  const translatedMeetingDetails = meetingResult.text;
   // NEXT SCHEDULE TRANSLATION
   // ===================================
 
-  useEffect(() => {
-    const title =
-      nextSchedule?.title ||
-      "";
-
-
-    const description =
-      nextSchedule?.description ||
-      "";
-
-
-    const sourceLanguage =
-      nextSchedule?.source_language ||
-      "";
-
-
-    setScheduleOriginal(
-      false
-    );
-
-
-    if (
-      !nextSchedule ||
-      sourceLanguage ===
-        language
-    ) {
-      setTranslatedScheduleTitle(
-        ""
-      );
-
-
-      setTranslatedScheduleDescription(
-        ""
-      );
-
-
-      return;
-    }
-
-
-    let cancelled =
-      false;
-
-
-    async function translateText(
-      text: string
-    ) {
-      if (!text) {
-        return "";
-      }
-
-
-      try {
-        const response =
-          await fetch(
-            "/api/translate",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  text,
-
-                  sourceLanguage,
-
-                  targetLanguage:
-                    language,
-                }),
-            }
-          );
-
-
-        const raw =
-          await response.text();
-
-
-        if (
-          !response.ok ||
-          !raw
-        ) {
-          return text;
-        }
-
-
-        const data =
-          JSON.parse(
-            raw
-          );
-
-
-        return (
-          data?.translatedText ||
-          text
-        );
-      } catch {
-        return text;
-      }
-    }
-
-
-    async function translate() {
-      const [
-        translatedTitle,
-        translatedDescription,
-      ] =
-        await Promise.all([
-          translateText(
-            title
-          ),
-
-          translateText(
-            description
-          ),
-        ]);
-
-
-      if (cancelled) {
-        return;
-      }
-
-
-      setTranslatedScheduleTitle(
-        translatedTitle
-      );
-
-
-      setTranslatedScheduleDescription(
-        translatedDescription
-      );
-    }
-
-
-    translate();
-
-
-    return () => {
-      cancelled =
-        true;
-    };
-  }, [
-    nextSchedule?.id,
-    nextSchedule?.title,
-    nextSchedule?.description,
-    nextSchedule?.source_language,
-    language,
-  ]);
+  
 
 
   // ===================================
   // MEETING TRANSLATION
   // ===================================
 
-  useEffect(() => {
-    const details =
-      meetingPoint?.details ||
-      "";
-
-
-    const sourceLanguage =
-      meetingPoint?.source_language ||
-      "";
-
-
-    setMeetingOriginal(
-      false
-    );
-
-
-    if (
-      !details ||
-      sourceLanguage ===
-        language
-    ) {
-      setTranslatedMeetingDetails(
-        ""
-      );
-
-
-      return;
-    }
-
-
-    let cancelled =
-      false;
-
-
-    async function translate() {
-      try {
-        const response =
-          await fetch(
-            "/api/translate",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  text:
-                    details,
-
-                  sourceLanguage,
-
-                  targetLanguage:
-                    language,
-                }),
-            }
-          );
-
-
-        const raw =
-          await response.text();
-
-
-        if (
-          cancelled ||
-          !response.ok ||
-          !raw
-        ) {
-          return;
-        }
-
-
-        const data =
-          JSON.parse(
-            raw
-          );
-
-
-        if (
-          cancelled
-        ) {
-          return;
-        }
-
-
-        setTranslatedMeetingDetails(
-          data?.translatedText ||
-          details
-        );
-      } catch {}
-    }
-
-
-    translate();
-
-
-    return () => {
-      cancelled =
-        true;
-    };
-  }, [
-    meetingPoint?.details,
-    meetingPoint?.source_language,
-    language,
-  ]);
+  
 
 
   // ===================================
@@ -2024,7 +1782,7 @@ export default function EventPage() {
           senderId,
       })
       .select(
-        "announcement_id,user_id,read_at"
+        "announcement_id,user_id,read_at,acknowledged_at"
       )
       .single();
 
@@ -3031,7 +2789,9 @@ export default function EventPage() {
               </button>
 
 
-              {nextSchedule &&
+              <TranslationStatus status={scheduleTitleResult.status} language={language} retry={scheduleTitleResult.retry} />
+              {scheduleDescriptionResult.status === 'failed' && <TranslationStatus status="failed" language={language} retry={scheduleDescriptionResult.retry} />}
+              {nextSchedule && scheduleTitleResult.status === 'translated' &&
                 nextSchedule.source_language !==
                   language && (
 
@@ -3121,6 +2881,7 @@ export default function EventPage() {
               </button>
 
 
+              <TranslationStatus status={meetingResult.status} language={language} retry={meetingResult.retry} />
               {meetingPoint && (
                 <div className="flex items-center gap-2 border-t border-neutral-100 px-5 py-3">
 
@@ -3394,6 +3155,7 @@ export default function EventPage() {
                 <p className="mt-4 line-clamp-3 text-[14px] font-semibold leading-6">
                   {latestEventAnnouncement.content}
                 </p>
+                <p className="mt-2 text-xs text-neutral-500">{language === 'ko' ? '확인 완료' : 'Confirmed'}: {confirmedCount(latestEventAnnouncement.id)} / {participants.length}</p>
 
 
                 <div className="mt-5 flex items-end justify-between">

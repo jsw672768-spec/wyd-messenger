@@ -271,7 +271,7 @@ end $$;
 -- Enable database change feeds only for existing application subscriptions.
 do $$ declare t text; begin
   if exists(select 1 from pg_publication where pubname='supabase_realtime') then
-    foreach t in array array['rooms','messages','announcements','announcement_reads','event_participants','event_announcements','event_announcement_reads','event_schedule_items','event_meeting_points','help_alerts'] loop
+    foreach t in array array['events','rooms','messages','announcements','announcement_reads','event_participants','event_announcements','event_announcement_reads','event_schedule_items','event_meeting_points','help_alerts'] loop
       execute format('alter publication supabase_realtime add table public.%I',t);
     end loop;
   end if;

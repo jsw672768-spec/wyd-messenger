@@ -69,3 +69,28 @@ test('client deduplicates requests and permits retry after a temporary failure',
     assert.equal(calls, 2);
   } finally { globalThis.fetch = original; }
 });
+
+test('provider retry is bounded, charged per attempt and preserves entity/edge whitespace', async () => {
+  const original = globalThis.fetch;
+  let calls=0, charged=0;
+  globalThis.fetch=async()=>++calls===1 ? new Response('temporary', {status:503}) : Response.json({responseStatus:200,responseData:{translatedText:'Tom &amp; Ana &#x1F30D;'}});
+  try {
+    assert.equal(await translate('  entity-retry-test\n','en','ko',async characters=>{charged+=characters;}),'  Tom & Ana 🌍\n');
+    assert.equal(calls,2); assert.equal(charged, 'entity-retry-test'.length*2);
+  } finally {globalThis.fetch=original;}
+});
+test('exhausted shared allowance never calls provider and can be retried after recovery', async () => {
+  const original=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;return Response.json({responseStatus:200,responseData:{translatedText:'restored'}});};
+  try {
+    await assert.rejects(translate('budget-recovery-test','en','ko',async()=>{throw Error('daily limit');}));
+    assert.equal(calls,0);
+    assert.equal(await translate('budget-recovery-test','en','ko',async()=>{}),'restored');
+    assert.equal(calls,1);
+  } finally {globalThis.fetch=original;}
+});
+test('invalid language and byte limits reject before charging or contacting provider', async () => {
+  let charged=0;
+  for(const [text,source,target] of [['Hello','xx','ko'],['가'.repeat(3001),'ko','en']]) await assert.rejects(translate(text,source,target,async()=>{charged++;}));
+  assert.equal(charged,0);
+});

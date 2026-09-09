@@ -23,6 +23,9 @@ try {
   assert.equal((await post('{')).status, 400);
   assert.equal((await post({ text: 'x', sourceLanguage: 'xx', targetLanguage: 'ko' })).status, 400);
   assert.equal((await post({ text: '가'.repeat(4000), sourceLanguage: 'en', targetLanguage: 'ko' })).status, 413);
+  assert.equal((await post({ text: 'x'.repeat(65000), sourceLanguage: 'en', targetLanguage: 'ko' })).status, 413);
+  const cross = await get('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://untrusted.example' }, body: JSON.stringify({ text: 'hi', sourceLanguage: 'en', targetLanguage: 'ko' }) }); assert.equal(cross.status, 403);
+  const unavailable = await post({ text: 'hello', sourceLanguage: 'en', targetLanguage: 'ko' }); assert.equal(unavailable.status, 503); assert.ok(!(await unavailable.json()).translatedText);
   const same = await post({ text: '안녕', sourceLanguage: 'ko', targetLanguage: 'ko' }); assert.equal(same.status, 200); assert.equal((await same.json()).translatedText, '안녕');
   console.log('Production smoke checks passed: home, shared-message route, manifest, icons, SW, offline page, API validation and same-language response.');
 } finally { server.kill('SIGTERM'); }

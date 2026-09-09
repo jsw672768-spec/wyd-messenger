@@ -1,4 +1,5 @@
 "use client";
+import { usePreferredLanguage } from "@/lib/use-preferred-language";
 
 import {
   useEffect,
@@ -74,10 +75,7 @@ export default function EventLayout({
   const supabase = useMemo(() => getSupabaseBrowser(), []);
 
 
-  const [
-    language,
-    setLanguage,
-  ] = useState("en");
+  const [language] = usePreferredLanguage();
 
 
   const { senderId } = useWydIdentity();
@@ -89,55 +87,10 @@ export default function EventLayout({
   ] = useState(false);
 
 
-  useEffect(() => {
-    const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
+  
 
 
-    
-
-
-    if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
-    }
-
-
-    
-  }, []);
-
-
-  useEffect(() => {
-    const timer =
-      setInterval(() => {
-        const saved =
-          localStorage.getItem(
-            "wyd_language"
-          );
-
-
-        if (
-          saved &&
-          saved !== language
-        ) {
-          setLanguage(
-            saved
-          );
-        }
-      }, 1000);
-
-
-    return () => {
-      clearInterval(
-        timer
-      );
-    };
-  }, [
-    language,
-  ]);
+  
 
 
   useEffect(() => {

@@ -11,6 +11,9 @@ import {
 
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
+import { useEventRole } from "@/lib/use-event-role";
+import AnnouncementReceipt from "@/components/announcement-receipt";
+import TranslationStatus from "@/components/translation-status";
 import { translateText, translationKey } from "@/lib/translation-client";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -291,6 +294,7 @@ export default function RoomPage() {
   const [needsLanguage, setNeedsLanguage] = useState(false);
   const [needsName, setNeedsName] = useState(false);
 
+  const [connectionState, setConnectionState] = useState('connecting');
   const [roomLoading, setRoomLoading] = useState(true);
   const [roomEnded, setRoomEnded] = useState(false);
   const [ownerId, setOwnerId] = useState("");
@@ -386,7 +390,8 @@ export default function RoomPage() {
 
   const t = copy[language] || copy.en;
 
-  const isOwner = !!senderId && senderId === ownerId;
+  const { canManage } = useEventRole(roomEventId, senderId);
+  const isOwner = canManage;
 
   const latestAnnouncement = announcements[0] || null;
 
@@ -414,6 +419,7 @@ export default function RoomPage() {
     
 
     if (savedLanguage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the saved name/language once after SSR; verified identity and database RLS authorize all actions.
       setLanguage(savedLanguage);
       setNeedsLanguage(false);
     } else {
@@ -460,6 +466,18 @@ export default function RoomPage() {
 
     let syncTimer: ReturnType<typeof setInterval> | null = null;
 
+    let refreshing = false;
+    async function refreshAll() {
+      if (!active || refreshing || document.visibilityState === 'hidden') return;
+      refreshing = true;
+      try { await Promise.all([refreshMessages(), refreshAnnouncements(), refreshParticipants(), refreshReadCounts(), refreshRoomStatus()]); }
+      finally { refreshing = false; }
+    }
+    const reconnect = () => { if (navigator.onLine) void refreshAll(); else setConnectionState('offline'); };
+    window.addEventListener('online', reconnect);
+    window.addEventListener('offline', reconnect);
+    document.addEventListener('visibilitychange', reconnect);
+
     function mergeMessage(incoming: Message) {
       setMessages((current) => {
         if (
@@ -502,7 +520,8 @@ export default function RoomPage() {
         return;
       }
 
-      setMessages((data as Message[]).reverse());
+      const incoming = (data as Message[]).reverse();
+      setMessages(current => JSON.stringify(current) === JSON.stringify(incoming) ? current : incoming);
     }
 
     async function refreshAnnouncements() {
@@ -518,7 +537,7 @@ export default function RoomPage() {
         return;
       }
 
-      setAnnouncements(data as Announcement[]);
+      setAnnouncements(current => JSON.stringify(current) === JSON.stringify(data) ? current : data as Announcement[]);
     }
 
     async function refreshParticipants() {
@@ -691,6 +710,13 @@ export default function RoomPage() {
       });
 
       channel
+        .on('system', {}, payload => {
+          if (payload.extension === 'postgres_changes' && payload.status === 'ok') {
+            if (active) setConnectionState('live');
+            // Backfill after the database listener is ready, including reconnects.
+            void refreshAll();
+          }
+        })
         .on(
           "presence",
           {
@@ -820,7 +846,8 @@ export default function RoomPage() {
           }
         )
         .subscribe(async (status) => {
-          console.log("WYD realtime:", status);
+          if (!active) return;
+          if (status !== 'SUBSCRIBED') setConnectionState(navigator.onLine ? 'reconnecting' : 'offline');
 
           if (status === "SUBSCRIBED") {
             await channel?.track({
@@ -832,13 +859,7 @@ export default function RoomPage() {
           }
         });
 
-      syncTimer = setInterval(() => {
-        refreshMessages();
-        refreshAnnouncements();
-        refreshParticipants();
-        refreshReadCounts();
-        refreshRoomStatus();
-      }, 3000);
+      syncTimer = setInterval(refreshAll, 15000);
 
       setRoomLoading(false);
     }
@@ -847,6 +868,9 @@ export default function RoomPage() {
 
     return () => {
       active = false;
+      window.removeEventListener('online', reconnect);
+      window.removeEventListener('offline', reconnect);
+      document.removeEventListener('visibilitychange', reconnect);
 
       if (syncTimer) {
         clearInterval(syncTimer);
@@ -882,7 +906,7 @@ export default function RoomPage() {
   useEffect(() => {
     let cancelled = false;
     if (roomEnded) return;
-    setTranslationFailed(false);
+
     for (const [items, update] of [
       [messages, setTranslatedMessages],
       [announcements, setTranslatedAnnouncements],
@@ -902,42 +926,6 @@ export default function RoomPage() {
   // ANNOUNCEMENT READ
   // -------------------------------------
 
-  useEffect(() => {
-    if (
-      !supabase ||
-      !senderId ||
-      !roomId ||
-      roomEnded ||
-      announcements.length === 0
-    ) {
-      return;
-    }
-
-    async function markRead() {
-      for (const announcement of announcements) {
-        const { error } = await supabase!
-          .from("announcement_reads")
-          .insert({
-            announcement_id: announcement.id,
-            room_id: roomId,
-            user_id: senderId,
-          });
-
-        if (error && error.code !== "23505") {
-          console.error("Read receipt error:", error);
-        }
-      }
-    }
-
-    markRead();
-  }, [
-    supabase,
-    announcements,
-    senderId,
-    roomId,
-    roomEnded,
-  ]);
-
   // -------------------------------------
   // SEND MESSAGE
   // -------------------------------------
@@ -952,15 +940,18 @@ export default function RoomPage() {
       submission.current = { id: crypto.randomUUID(), content, language };
     }
     sendLock.current = true; setSending(true); setSendError('');
-    const { data, error } = await supabase.rpc('send_wyd_message', {
-      p_room_id: roomId, p_client_message_id: submission.current.id,
-      p_content: content, p_source_language: language,
-    }).single();
-    sendLock.current = false; setSending(false);
-    if (error) {
+    let data: unknown;
+    try {
+      const result = await supabase.rpc('send_wyd_message', {
+        p_room_id: roomId, p_client_message_id: submission.current.id,
+        p_content: content, p_source_language: language,
+      }).single();
+      if (result.error) throw result.error;
+      data = result.data;
+    } catch {
       setSendError(language === 'ko' ? '전송을 확인하지 못했어요. 다시 전송해도 같은 메시지는 한 번만 저장돼요.' : 'Delivery could not be confirmed. Retry safely; the same message is saved only once.');
       return;
-    }
+    } finally { sendLock.current = false; setSending(false); }
     submission.current = null; setMessageInput('');
     if (data) {
       const savedMessage = data as Message;
@@ -1011,7 +1002,7 @@ export default function RoomPage() {
         ended_at: new Date().toISOString(),
       })
       .eq("id", roomId)
-      .eq("owner_id", senderId);
+      ;
 
     if (error) {
       console.error("End room error:", error);
@@ -1351,7 +1342,8 @@ export default function RoomPage() {
     <main className="h-[100dvh] bg-[#f4f4f2] text-[#101820]">
       <div className="mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-[#fffefb]">
 
-        {translationFailed && <div role="status" className="bg-amber-50 px-4 py-2 text-xs text-amber-900">{language === 'ko' ? '일부 번역을 불러오지 못해 원문을 표시합니다.' : 'Some translations are unavailable. Showing original text.'}<button onClick={() => setTranslationRetry((value) => value + 1)} className="ml-2 underline">{language === 'ko' ? '다시 번역' : 'Retry'}</button></div>}
+        {connectionState !== 'live' && <p role="status" className="mx-auto max-w-[430px] bg-amber-50 px-4 py-2 text-xs text-amber-900">{language === 'ko' ? (connectionState === 'offline' ? '인터넷 연결이 끊겼어요. 작성 중인 메시지는 이 화면에 유지돼요.' : '실시간 연결을 확인하고 있어요. 연결되면 빠진 메시지를 다시 불러와요.') : (connectionState === 'offline' ? 'You are offline. Your draft stays on this screen.' : 'Restoring live updates. Missed messages are fetched when connected.')}</p>}
+      {translationFailed && <div role="status" className="bg-amber-50 px-4 py-2 text-xs text-amber-900">{language === 'ko' ? '일부 번역을 불러오지 못해 원문을 표시합니다.' : 'Some translations are unavailable. Showing original text.'}<button onClick={() => setTranslationRetry((value) => value + 1)} className="ml-2 underline">{language === 'ko' ? '다시 번역' : 'Retry'}</button></div>}
         {/* HEADER */}
 
         <header className="shrink-0 border-b border-neutral-100 bg-[#fffefb]/95 px-4 pb-3 pt-4 backdrop-blur-xl">
@@ -1860,14 +1852,16 @@ export default function RoomPage() {
 
                       <span className="text-[9px] text-neutral-400">
                         {readCounts[announcement.id] || 0}{" "}
-                        {t.confirmed} /{" "}
-                        {onlineParticipants.length}
+                        {language === 'ko' ? '읽음' : 'read'} /{" "}
+                        {participantDirectory.length}
                       </span>
                     </div>
 
                     <p className="mt-3 whitespace-pre-wrap text-[13px] leading-6">
                       {announcementText(announcement)}
                     </p>
+                    <TranslationStatus status={announcement.source_language === language || translated ? 'original' : translationFailed ? 'failed' : 'loading'} language={language} retry={() => { setTranslationFailed(false); setTranslationRetry(value => value + 1); }} />
+                    <AnnouncementReceipt scope="room" id={announcement.id} parentId={roomId} userId={senderId} language={language} />
 
                     <div className="mt-3 flex items-center justify-between">
                       <div>

@@ -1,4 +1,8 @@
 "use client";
+import { usePreferredLanguage } from "@/lib/use-preferred-language";
+import { useTranslation } from "@/lib/use-translation";
+import AnnouncementReceipt from "@/components/announcement-receipt";
+import TranslationStatus from "@/components/translation-status";
 
 import {
   ReactNode,
@@ -82,10 +86,7 @@ export default function Template({
   const { senderId } = useWydIdentity();
 
 
-  const [
-    language,
-    setLanguage,
-  ] = useState("en");
+  const [language] = usePreferredLanguage();
 
 
   const [
@@ -109,7 +110,7 @@ export default function Template({
   // =====================================
 
   const [
-    currentHelpAlert,
+    loadedHelpAlert,
     setCurrentHelpAlert,
   ] = useState<HelpAlert | null>(
     null
@@ -130,17 +131,14 @@ export default function Template({
   // =====================================
 
   const [
-    currentAnnouncement,
+    loadedAnnouncement,
     setCurrentAnnouncement,
   ] = useState<EventAnnouncement | null>(
     null
   );
 
 
-  const [
-    translatedAnnouncement,
-    setTranslatedAnnouncement,
-  ] = useState("");
+  
 
 
   const [
@@ -187,27 +185,13 @@ export default function Template({
   ] = useState("");
 
 
-  const ownedEventIds =
-    ownedEvents.map(
-      (event) =>
-        event.id
-    );
+  const ownedEventKey = ownedEvents.map(event => event.id).sort().join(',');
+  const memberEventKey = memberEvents.map(event => event.id).sort().join(',');
+  const ownedEventIds = useMemo(() => ownedEventKey.split(',').filter(Boolean), [ownedEventKey]);
+  const memberEventIds = useMemo(() => memberEventKey.split(',').filter(Boolean), [memberEventKey]);
 
-
-  const memberEventIds =
-    memberEvents.map(
-      (event) =>
-        event.id
-    );
-
-
-  const ownedEventKey =
-    ownedEventIds.join(",");
-
-
-  const memberEventKey =
-    memberEventIds.join(",");
-
+  const currentHelpAlert = senderId && loadedHelpAlert && ownedEventIds.includes(loadedHelpAlert.event_id) ? loadedHelpAlert : null;
+  const currentAnnouncement = senderId && loadedAnnouncement && memberEventIds.includes(loadedAnnouncement.event_id) ? loadedAnnouncement : null;
 
   /*
    * /event/abc123 페이지일 때만
@@ -252,25 +236,19 @@ export default function Template({
     
 
 
-    const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
+    
 
 
     
 
 
-    if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
-    }
+    
 
 
     if (
       "Notification" in window
     ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Notification permission exists only in the browser; read it once after hydration, then update from user actions.
       setNotificationPermission(
         Notification.permission
       );
@@ -350,31 +328,7 @@ export default function Template({
    * 페이지에서 언어를 바꾼 경우에도
    * 주기적으로 현재 설정을 다시 읽는다.
    */
-  useEffect(() => {
-    const timer =
-      setInterval(() => {
-        const saved =
-          localStorage.getItem(
-            "wyd_language"
-          );
-
-
-        if (
-          saved &&
-          saved !== language
-        ) {
-          setLanguage(
-            saved
-          );
-        }
-      }, 1500);
-
-
-    return () =>
-      clearInterval(
-        timer
-      );
-  }, [language]);
+  
 
 
   // =====================================
@@ -398,21 +352,8 @@ export default function Template({
       /*
        * 내가 운영자인 이벤트
        */
-      const {
-        data: ownedData,
-        error: ownedError,
-      } = await supabase!
-        .from("events")
-        .select("id,name")
-        .eq(
-          "owner_id",
-          senderId
-        )
-        .eq(
-          "status",
-          "active"
-        );
-
+      const managed = await supabase!.from('event_participants').select('event_id').eq('user_id', senderId).in('role', ['organizer', 'staff']);
+      const { data: ownedData, error: ownedError } = await supabase!.from('events').select('id,name').in('id', (managed.data || []).map(row => row.event_id)).eq('status', 'active');
 
       if (
         active &&
@@ -538,10 +479,6 @@ export default function Template({
       !supabase ||
       ownedEventIds.length === 0
     ) {
-      setCurrentHelpAlert(
-        null
-      );
-
       return;
     }
 
@@ -664,7 +601,7 @@ export default function Template({
   }, [
     supabase,
     senderId,
-    ownedEventKey,
+    ownedEventIds,
   ]);
 
 
@@ -841,7 +778,7 @@ export default function Template({
       } catch {}
     };
   }, [
-    currentHelpAlert?.id,
+    currentHelpAlert,
   ]);
 
 
@@ -855,10 +792,6 @@ export default function Template({
       !senderId ||
       memberEventIds.length === 0
     ) {
-      setCurrentAnnouncement(
-        null
-      );
-
       return;
     }
 
@@ -912,7 +845,7 @@ export default function Template({
           "event_announcement_reads"
         )
         .select(
-          "announcement_id"
+          "announcement_id,acknowledged_at"
         )
         .eq(
           "user_id",
@@ -935,7 +868,7 @@ export default function Template({
 
       const readIds =
         new Set(
-          readData.map(
+          readData.filter(row => row.acknowledged_at).map(
             (row) =>
               Number(
                 row.announcement_id
@@ -955,9 +888,7 @@ export default function Template({
         ) || null;
 
 
-      setCurrentAnnouncement(
-        unread
-      );
+      setCurrentAnnouncement(current => JSON.stringify(current) === JSON.stringify(unread) ? current : unread);
     }
 
 
@@ -1036,132 +967,17 @@ export default function Template({
   }, [
     supabase,
     senderId,
-    memberEventKey,
+    memberEventIds,
   ]);
 
 
   // =====================================
+  const announcementResult = useTranslation(currentAnnouncement?.content || '', currentAnnouncement?.source_language || '', language);
+  const translatedAnnouncement = announcementResult.text;
   // TRANSLATE EVENT ANNOUNCEMENT
   // =====================================
 
-  useEffect(() => {
-    if (
-      !currentAnnouncement
-    ) {
-      setTranslatedAnnouncement(
-        ""
-      );
-
-      setShowingOriginal(
-        false
-      );
-
-      return;
-    }
-
-
-    setTranslatedAnnouncement(
-      ""
-    );
-
-    setShowingOriginal(
-      false
-    );
-
-
-    if (
-      currentAnnouncement.source_language ===
-      language
-    ) {
-      return;
-    }
-
-
-    let cancelled =
-      false;
-
-
-    async function translate() {
-      try {
-        const response =
-          await fetch(
-            "/api/translate",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  text:
-                    currentAnnouncement!
-                      .content,
-
-                  sourceLanguage:
-                    currentAnnouncement!
-                      .source_language,
-
-                  targetLanguage:
-                    language,
-                }),
-            }
-          );
-
-
-        const raw =
-          await response.text();
-
-
-        if (
-          !response.ok ||
-          !raw
-        ) {
-          return;
-        }
-
-
-        const data =
-          JSON.parse(raw);
-
-
-        if (
-          cancelled ||
-          !data?.translatedText
-        ) {
-          return;
-        }
-
-
-        setTranslatedAnnouncement(
-          data.translatedText
-        );
-      } catch (
-        error
-      ) {
-        console.error(
-          "Event announcement translation error:",
-          error
-        );
-      }
-    }
-
-
-    translate();
-
-
-    return () => {
-      cancelled =
-        true;
-    };
-  }, [
-    currentAnnouncement?.id,
-    currentAnnouncement?.content,
-    currentAnnouncement?.source_language,
-    language,
-  ]);
+  
 
 
   // =====================================
@@ -1210,7 +1026,7 @@ export default function Template({
       );
     } catch {}
   }, [
-    currentAnnouncement?.id,
+    currentAnnouncement,
   ]);
 
 
@@ -1355,23 +1171,7 @@ export default function Template({
       currentAnnouncement;
 
 
-    const {
-      error,
-    } = await supabase
-      .from(
-        "event_announcement_reads"
-      )
-      .insert({
-        announcement_id:
-          announcement.id,
-
-        event_id:
-          announcement.event_id,
-
-        user_id:
-          senderId,
-      });
-
+    const { error } = await supabase.rpc('acknowledge_wyd_announcement', { p_scope: 'event', p_announcement_id: announcement.id });
 
     if (
       error &&
@@ -1389,11 +1189,6 @@ export default function Template({
 
     setCurrentAnnouncement(
       null
-    );
-
-
-    setTranslatedAnnouncement(
-      ""
     );
   }
 
@@ -1839,6 +1634,8 @@ export default function Template({
               <p className="mt-4 whitespace-pre-wrap break-words text-[14px] font-semibold leading-6">
                 {displayedAnnouncementText}
               </p>
+                  <TranslationStatus status={announcementResult.status} language={language} retry={announcementResult.retry} />
+                  <AnnouncementReceipt key={currentAnnouncement.id} scope="event" id={currentAnnouncement.id} parentId={currentAnnouncement.event_id} userId={senderId} language={language} />
 
 
               {currentAnnouncement.source_language !==
@@ -1928,6 +1725,8 @@ export default function Template({
                   <p className="whitespace-pre-wrap break-words text-[16px] font-black leading-7">
                     {displayedAnnouncementText}
                   </p>
+                  <TranslationStatus status={announcementResult.status} language={language} retry={announcementResult.retry} />
+                  <AnnouncementReceipt key={currentAnnouncement.id} scope="event" id={currentAnnouncement.id} parentId={currentAnnouncement.event_id} userId={senderId} language={language} />
 
                 </div>
 
