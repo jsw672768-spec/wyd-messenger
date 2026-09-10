@@ -1,0 +1,42 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'org.wyd.messenger'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'org.wyd.messenger'
+        minSdk 26
+        targetSdk 36
+        versionCode = (System.getenv('WYD_VERSION_CODE') ?: '2').toInteger()
+        versionName = System.getenv('WYD_VERSION_NAME') ?: '1.0.1'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        def site = (project.findProperty('wydSiteUrl') ?: System.getenv('WYD_SITE_URL') ?: '').toString()
+        buildConfigField 'String', 'DEFAULT_SITE_URL', '"' + site.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    }
+    buildFeatures { buildConfig true }
+    signingConfigs {
+        managedDebug {
+            def path = System.getenv('WYD_DEBUG_KEYSTORE_PATH')
+            if (path) {
+                storeFile file(path)
+                storePassword System.getenv('WYD_DEBUG_STORE_PASSWORD')
+                keyAlias System.getenv('WYD_DEBUG_KEY_ALIAS')
+                keyPassword System.getenv('WYD_DEBUG_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release { minifyEnabled false }
+        debug {
+            applicationIdSuffix '.debug'; versionNameSuffix '-debug'
+            if (System.getenv('WYD_DEBUG_KEYSTORE_PATH')) signingConfig signingConfigs.managedDebug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions { unitTests.returnDefaultValues = true }
+}
+
+dependencies { testImplementation 'junit:junit:4.13.2' }

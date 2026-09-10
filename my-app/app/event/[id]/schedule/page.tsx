@@ -1,4 +1,8 @@
 "use client";
+import { usePreferredLanguage } from "@/lib/use-preferred-language";
+import { useEventRole } from "@/lib/use-event-role";
+import { useTranslation } from "@/lib/use-translation";
+import TranslationStatus from "@/components/translation-status";
 
 import {
   useEffect,
@@ -13,9 +17,7 @@ import {
   useRouter,
 } from "next/navigation";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
 
 
 type EventData = {
@@ -41,10 +43,7 @@ type ScheduleItem = {
 };
 
 
-type Translation = {
-  title?: string;
-  description?: string;
-};
+
 
 
 type AnnouncementPriority =
@@ -273,27 +272,9 @@ export default function SchedulePage() {
       : String(rawId || "");
 
 
-  const supabase =
-    useMemo(() => {
-      const url =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_URL;
-
-      const key =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-
-      if (!url || !key) {
-        return null;
-      }
-
-
-      return createClient(
-        url,
-        key
-      );
-    }, []);
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 30000); return () => clearInterval(timer); }, []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
 
   const [
@@ -310,16 +291,10 @@ export default function SchedulePage() {
   );
 
 
-  const [
-    senderId,
-    setSenderId,
-  ] = useState("");
+  const { senderId } = useWydIdentity();
 
 
-  const [
-    language,
-    setLanguage,
-  ] = useState("en");
+  const [language] = usePreferredLanguage();
 
 
   const [
@@ -330,12 +305,7 @@ export default function SchedulePage() {
   );
 
 
-  const [
-    translations,
-    setTranslations,
-  ] = useState<
-    Record<number, Translation>
-  >({});
+  
 
 
   const [
@@ -407,11 +377,7 @@ export default function SchedulePage() {
     copy.en;
 
 
-  const isOrganizer =
-    !!eventData &&
-    !!senderId &&
-    eventData.owner_id ===
-      senderId;
+  const { canManage: isOrganizer } = useEventRole(eventId, senderId);
 
 
   const upcoming =
@@ -423,7 +389,7 @@ export default function SchedulePage() {
 
         return (
           new Date(end).getTime() >=
-          Date.now()
+          clock
         );
       }
     );
@@ -438,7 +404,7 @@ export default function SchedulePage() {
 
         return (
           new Date(end).getTime() <
-          Date.now()
+          clock
         );
       }
     );
@@ -448,32 +414,7 @@ export default function SchedulePage() {
   // PROFILE
   // ===================================
 
-  useEffect(() => {
-    const savedId =
-      localStorage.getItem(
-        "wyd_sender_id"
-      );
-
-
-    const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
-
-
-    if (savedId) {
-      setSenderId(
-        savedId
-      );
-    }
-
-
-    if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
-    }
-  }, []);
+  
 
 
   // ===================================
@@ -483,6 +424,7 @@ export default function SchedulePage() {
   useEffect(() => {
     if (
       !supabase ||
+      !senderId ||
       !eventId
     ) {
       return;
@@ -610,6 +552,7 @@ export default function SchedulePage() {
   }, [
     supabase,
     eventId,
+    senderId,
   ]);
 
 
@@ -617,138 +560,7 @@ export default function SchedulePage() {
   // TRANSLATION
   // ===================================
 
-  useEffect(() => {
-    let cancelled =
-      false;
-
-
-    async function translateText(
-      text: string,
-      sourceLanguage: string
-    ) {
-      if (
-        !text ||
-        sourceLanguage ===
-          language
-      ) {
-        return text;
-      }
-
-
-      try {
-        const response =
-          await fetch(
-            "/api/translate",
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  text,
-
-                  sourceLanguage,
-
-                  targetLanguage:
-                    language,
-                }),
-            }
-          );
-
-
-        const raw =
-          await response.text();
-
-
-        if (
-          !response.ok ||
-          !raw
-        ) {
-          return text;
-        }
-
-
-        const data =
-          JSON.parse(raw);
-
-
-        return (
-          data?.translatedText ||
-          text
-        );
-      } catch {
-        return text;
-      }
-    }
-
-
-    async function translateAll() {
-      for (
-        const item of items
-      ) {
-        if (
-          cancelled ||
-          item.source_language ===
-            language ||
-          translations[
-            item.id
-          ]
-        ) {
-          continue;
-        }
-
-
-        const title =
-          await translateText(
-            item.title,
-            item.source_language
-          );
-
-
-        const description =
-          item.description
-            ? await translateText(
-                item.description,
-                item.source_language
-              )
-            : "";
-
-
-        if (cancelled) {
-          return;
-        }
-
-
-        setTranslations(
-          (current) => ({
-            ...current,
-
-            [item.id]: {
-              title,
-              description,
-            },
-          })
-        );
-      }
-    }
-
-
-    translateAll();
-
-
-    return () => {
-      cancelled =
-        true;
-    };
-  }, [
-    items,
-    language,
-    translations,
-  ]);
+  
 
 
   // ===================================
@@ -1317,11 +1129,6 @@ export default function SchedulePage() {
     }
 
 
-    setTranslations(
-      {}
-    );
-
-
     setSaving(
       false
     );
@@ -1398,59 +1205,6 @@ export default function SchedulePage() {
   // ===================================
   // TEXT
   // ===================================
-
-  function titleText(
-    item: ScheduleItem
-  ) {
-    if (
-      originalItems[
-        item.id
-      ] ||
-      item.source_language ===
-        language
-    ) {
-      return item.title;
-    }
-
-
-    return (
-      translations[
-        item.id
-      ]?.title ||
-      item.title
-    );
-  }
-
-
-  function descriptionText(
-    item: ScheduleItem
-  ) {
-    if (
-      !item.description
-    ) {
-      return "";
-    }
-
-
-    if (
-      originalItems[
-        item.id
-      ] ||
-      item.source_language ===
-        language
-    ) {
-      return item.description;
-    }
-
-
-    return (
-      translations[
-        item.id
-      ]?.description ||
-      item.description
-    );
-  }
-
 
   // ===================================
   // UI
@@ -1621,20 +1375,6 @@ export default function SchedulePage() {
                     item={
                       item
                     }
-                    title={
-                      titleText(
-                        item
-                      )
-                    }
-                    description={
-                      descriptionText(
-                        item
-                      )
-                    }
-                    translated={
-                      item.source_language !==
-                      language
-                    }
                     original={
                       !!originalItems[
                         item.id
@@ -1706,20 +1446,6 @@ export default function SchedulePage() {
                     }
                     item={
                       item
-                    }
-                    title={
-                      titleText(
-                        item
-                      )
-                    }
-                    description={
-                      descriptionText(
-                        item
-                      )
-                    }
-                    translated={
-                      item.source_language !==
-                      language
                     }
                     original={
                       !!originalItems[
@@ -1975,9 +1701,6 @@ export default function SchedulePage() {
 
 function ScheduleCard({
   item,
-  title,
-  description,
-  translated,
   original,
   t,
   language,
@@ -1987,9 +1710,6 @@ function ScheduleCard({
   onDelete,
 }: {
   item: ScheduleItem;
-  title: string;
-  description: string;
-  translated: boolean;
   original: boolean;
   t: Record<string, string>;
   language: string;
@@ -1998,6 +1718,11 @@ function ScheduleCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const titleResult = useTranslation(item.title, item.source_language, language);
+  const descriptionResult = useTranslation(item.description || '', item.source_language, language);
+  const title = original ? item.title : titleResult.text || item.title;
+  const description = original ? item.description : descriptionResult.text || item.description;
+  const translated = titleResult.status === 'translated' || descriptionResult.status === 'translated';
   return (
     <article className="rounded-[25px] border border-neutral-100 bg-white p-5 shadow-[0_8px_25px_rgba(0,0,0,0.035)]">
 
@@ -2064,6 +1789,8 @@ function ScheduleCard({
           )}
 
 
+          <TranslationStatus status={titleResult.status} language={language} retry={titleResult.retry} />
+          {descriptionResult.status === 'failed' && <TranslationStatus status="failed" language={language} retry={descriptionResult.retry} />}
           {translated && (
 
             <button

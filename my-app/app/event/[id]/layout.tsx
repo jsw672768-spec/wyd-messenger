@@ -1,4 +1,5 @@
 "use client";
+import { usePreferredLanguage } from "@/lib/use-preferred-language";
 
 import {
   useEffect,
@@ -13,9 +14,7 @@ import {
   useRouter,
 } from "next/navigation";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
 
 
 const navCopy: Record<
@@ -73,39 +72,13 @@ export default function EventLayout({
       : String(rawId || "");
 
 
-  const supabase =
-    useMemo(() => {
-      const url =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_URL;
-
-      const key =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
 
-      if (!url || !key) {
-        return null;
-      }
+  const [language] = usePreferredLanguage();
 
 
-      return createClient(
-        url,
-        key
-      );
-    }, []);
-
-
-  const [
-    language,
-    setLanguage,
-  ] = useState("en");
-
-
-  const [
-    senderId,
-    setSenderId,
-  ] = useState("");
+  const { senderId } = useWydIdentity();
 
 
   const [
@@ -114,62 +87,10 @@ export default function EventLayout({
   ] = useState(false);
 
 
-  useEffect(() => {
-    const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
+  
 
 
-    const savedSenderId =
-      localStorage.getItem(
-        "wyd_sender_id"
-      );
-
-
-    if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
-    }
-
-
-    if (savedSenderId) {
-      setSenderId(
-        savedSenderId
-      );
-    }
-  }, []);
-
-
-  useEffect(() => {
-    const timer =
-      setInterval(() => {
-        const saved =
-          localStorage.getItem(
-            "wyd_language"
-          );
-
-
-        if (
-          saved &&
-          saved !== language
-        ) {
-          setLanguage(
-            saved
-          );
-        }
-      }, 1000);
-
-
-    return () => {
-      clearInterval(
-        timer
-      );
-    };
-  }, [
-    language,
-  ]);
+  
 
 
   useEffect(() => {

@@ -1,36 +1,28 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WYD Messenger 웹앱
 
-## Getting Started
+기존 QR 중심 화면, 행사·국가방·일반방, 공지·채팅·일정·집합 장소를 유지한 Next.js 앱입니다. Android 호스트는 상위 android-app에 있습니다.
 
-First, run the development server:
+## 실행
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Node.js 22.18 이상에서 npm ci를 실행합니다. 설정 없이도 npm run dev로 첫 화면과 QR 메시지 원문을 확인할 수 있습니다. 운영 빌드는 npm run build, 실행은 npm start입니다.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+.env.example은 설정 이름만 제공합니다. [기존 데이터 보존 계획](../docs/SUPABASE_ROLLOUT.md)을 확인한 뒤 NEXT_PUBLIC_SUPABASE_URL과 NEXT_PUBLIC_SUPABASE_ANON_KEY를 빌드 전에 설정합니다. 서비스 역할 키와 번역 비밀키는 공개 변수에 넣지 않습니다. 인증·행사·채팅·운영 번역은 검증된 Supabase가 필요합니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 구현
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Supabase Anonymous Auth와 서버 RLS를 사용합니다. 기존 wyd_sender_id를 신원·소유권 증거로 채택하거나 삭제하지 않습니다.
+- 행사 생성·QR 참가·메시지 전송·역할 변경·행사 종료는 검증된 RPC로 처리하고 방장/운영자/참가자를 구분합니다.
+- 공지 읽음은 화면 노출 후, 확인은 명시적인 버튼 조작 후 저장합니다. 번역 실패·지연이 원문 공지를 숨기지 않습니다.
+- 서버 구독 준비 후 누락 데이터를 다시 읽고 재연결·화면 복귀 때 갱신합니다. 채팅은 최근 100개이며 과거 메시지 페이지 이동은 미구현입니다.
+- 번역은 UTF-8 450바이트 조각·최대 4개 병렬 처리, 중복 제거, 서버 10분/500개·브라우저 300개 캐시를 적용합니다. 전체 입력 9,000바이트, 제공자 시도 최대 2회, 서버 전체 마감 20초입니다.
+- 번역 예산은 DB의 원자적 예약으로 인스턴스 간 공유합니다. 기본 전체 5,000자/일, 사용자별 60회·9,000자/분입니다. 제공자 시도마다 차감하고 실패를 성공으로 캐시하지 않습니다.
+- 독립 QR 메시지는 240자까지 URL의 #에 담습니다. 링크 보유자는 원문을 읽을 수 있고 링크는 회수되지 않습니다. 이름은 인증 신원이 아닙니다. 번역 시 서버·MyMemory에 원문을 보냅니다. 설정 없는 운영 환경의 번역은 503으로 실패 상태를 명시합니다.
+- 서비스 워커는 채팅·공지·인증을 캐시하지 않습니다. 오프라인 전송·번역, 백그라운드 푸시는 제공하지 않습니다.
 
-## Learn More
+## 검증과 한계
 
-To learn more about Next.js, take a look at the following resources:
+npm run typecheck, npm run lint, npm test, npm run build, node tests/smoke.mjs를 사용합니다. tests/supabase-flow.mjs는 격리 로컬 Supabase를 실행한 CI에서 실제 JWT·RLS·Realtime을 검사하며 운영 프로젝트·실기기를 대신하지 않습니다.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+번역 언어는 10개이며 메뉴 현지화는 한국어·영어·스페인어 중심입니다. 공지 내용을 바꾸고 재확인이 필요하면 **새 공지로 발송**해야 합니다. 수정 시 확인 이력 버전 구분, 익명 방장 복구, 부하 검사와 실제 두 기기 전체 흐름은 남아 있습니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[상세 검증 기록](../docs/VERIFICATION.md) · [배포 절차](DEPLOYMENT.md)

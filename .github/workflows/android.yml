@@ -1,0 +1,136 @@
+name: Android managed test distribution
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: 'Approved stable HTTPS service origin'
+        required: true
+        type: string
+      version_code:
+        description: 'Integer above the previous managed build'
+        required: true
+        type: string
+      version_name:
+        description: 'Version such as 1.0.2'
+        required: true
+        type: string
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  candidate:
+    environment: android-distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Require the protected persistent signer
+        env:
+          SIGNER_BASE64: ${{ secrets.WYD_DEBUG_KEYSTORE_BASE64 }}
+          WYD_SITE_URL: ${{ inputs.site_url }}
+          WYD_VERSION_CODE: ${{ inputs.version_code }}
+          WYD_VERSION_NAME: ${{ inputs.version_name }}
+          EXPECTED_CERT: ${{ vars.WYD_DEBUG_CERT_SHA256 }}
+        run: |
+          python - <<'PY'
+          import os,re,base64,pathlib,urllib.parse
+          u=urllib.parse.urlparse(os.environ['WYD_SITE_URL'])
+          assert u.scheme=='https' and u.hostname and not u.username and not u.password
+          assert u.port in (None,443) and u.path in ('','/') and not u.query and not u.fragment
+          assert not u.hostname.endswith('.app.github.dev'), 'Use the approved stable service'
+          assert int(os.environ['WYD_VERSION_CODE'])>2
+          assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',os.environ['WYD_VERSION_NAME'])
+          assert re.fullmatch(r'[0-9a-fA-F]{64}',os.environ['EXPECTED_CERT'])
+          assert os.environ['SIGNER_BASE64'], 'Protected signer required; ephemeral distribution is forbidden'
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'wyd-managed-test.jks'
+          p.write_bytes(base64.b64decode(os.environ['SIGNER_BASE64'],validate=True));p.chmod(0o600)
+          PY
+      - name: Build and lint with the persistent test signer
+        working-directory: android-app
+        env:
+          WYD_SITE_URL: ${{ inputs.site_url }}
+          WYD_VERSION_CODE: ${{ inputs.version_code }}
+          WYD_VERSION_NAME: ${{ inputs.version_name }}
+          WYD_DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/wyd-managed-test.jks
+          WYD_DEBUG_STORE_PASSWORD: ${{ secrets.WYD_DEBUG_STORE_PASSWORD }}
+          WYD_DEBUG_KEY_ALIAS: ${{ secrets.WYD_DEBUG_KEY_ALIAS }}
+          WYD_DEBUG_KEY_PASSWORD: ${{ secrets.WYD_DEBUG_KEY_PASSWORD }}
+        run: gradle --no-daemon testDebugUnitTest assembleDebug lintDebug
+      - name: Verify the artifact and expected certificate
+        env:
+          EXPECTED_CERT: ${{ vars.WYD_DEBUG_CERT_SHA256 }}
+        run: |
+          mkdir -p evidence/current
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk evidence/current/WYD-Messenger-debug.apk
+          bash android-app/scripts/verify-apk.sh evidence/current/WYD-Messenger-debug.apk evidence/current
+          python - <<'PY'
+          import os,re,pathlib
+          actual=re.search(r'certificate SHA-256 digest: ([0-9a-fA-F]+)',pathlib.Path('evidence/current/signature.txt').read_text()).group(1)
+          assert actual.lower()==os.environ['EXPECTED_CERT'].lower(), 'Unexpected signer'
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WYD-managed-candidate
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/wyd-managed-test.jks"
+  install:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26,36]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: WYD-managed-candidate
+          path: evidence
+      - name: Enable KVM for disposable emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
+          script: bash android-app/scripts/install-smoke.sh evidence device-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WYD-managed-install-API-${{ matrix.api }}
+          path: device-evidence/
+          retention-days: 30
+  verified:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: WYD-managed-candidate
+          path: verified
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WYD-managed-APK-install-verified
+          path: verified/current/
+          if-no-files-found: error
+          retention-days: 30

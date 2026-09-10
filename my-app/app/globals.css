@@ -1,23 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --font-wyd-sans: Arial, Helvetica, sans-serif;
+  --font-wyd-mono: monospace;
+  --background: #fffefb;
   --foreground: #171717;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-wyd-sans);
+  --font-mono: var(--font-wyd-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
 
 body {
   background: var(--background);
@@ -54,4 +50,159 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+:focus-visible { outline: 3px solid #2868d8; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+
+/* WYD's QR-first home and shared-message reader. Existing event styles stay scoped. */
+.wyd-home { --wyd-blue: #245dd8; --wyd-ink: #142235; --wyd-muted: #607086; --wyd-line: #dce4ef; --wyd-surface: #fff; min-height: 100dvh; background: #f3f6fb; color: var(--wyd-ink); font-size: 1rem; line-height: 1.6; }
+.wyd-shell { width: min(100% - 3rem, 1100px); margin: 0 auto; padding: 28px 0 36px; }
+.wyd-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 55px; }
+.wyd-brand { display: inline-flex; align-items: center; gap: 14px; color: #142235; text-decoration: none; }
+.wyd-brand > span { font-size: 2.25rem; font-weight: 900; line-height: 1; letter-spacing: -.055em; }
+.wyd-brand-dot { color: #245dd8; }
+.wyd-brand small { font-size: .75rem; font-weight: 700; letter-spacing: .16em; padding-left: 14px; border-left: 1px solid #c7d2e3; }
+.wyd-page-intro { margin: 30px 0 25px; }
+.wyd-eyebrow { font-size: .75rem; color: #245dd8; letter-spacing: .15em; font-weight: 800; }
+.wyd-page-intro h1 { margin-top: 5px; font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 750; letter-spacing: -.035em; line-height: 1.4; }
+.wyd-workspace { display: grid; grid-template-columns: minmax(0, .84fr) minmax(0, 1.16fr); align-items: start; gap: 26px; }
+.wyd-connect-column { min-width: 0; }
+.wyd-card { background: #fff; border: 1px solid #dce4ef; border-radius: 26px; box-shadow: 0 8px 28px #233b6410; overflow: hidden; }
+.wyd-scan-card { border-radius: 26px; background: #245dd8; padding: 26px 28px 28px; color: white; }
+.wyd-scan-top { display: flex; align-items: center; gap: 10px; font-size: .875rem; font-weight: 600; }
+.wyd-scan-top > svg { margin-left: auto; color: #dbe7ff; }
+.wyd-step { display: inline-flex; justify-content: center; align-items: center; flex-shrink: 0; min-width: 30px; height: 30px; border: 1px solid #ffffff50; border-radius: 50%; font-size: .75rem; font-weight: 700; }
+.wyd-scan-symbol { margin: 26px 0 19px; display: inline-flex; align-items: center; justify-content: center; width: 86px; height: 86px; color: #ffdc55; }
+.wyd-scan-card h2 { font-size: clamp(1.75rem, 3vw, 2.35rem); line-height: 1.32; letter-spacing: -.035em; font-weight: 750; white-space: pre-line; }
+.wyd-scan-card > p { margin: 14px 0 24px; font-size: 1rem; line-height: 1.7; color: #e0e9ff; white-space: pre-line; }
+.wyd-button { border: 1px solid transparent; border-radius: 13px; padding: 12px 18px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font-size: .875rem; font-weight: 700; line-height: 1.5; text-align: center; cursor: pointer; text-decoration: none; transition: background .15s ease, transform .15s ease; }
+.wyd-button:active:not(:disabled) { transform: translateY(1px); }
+.wyd-button:disabled { cursor: not-allowed; opacity: .45; }
+.wyd-button-primary { background: #245dd8; color: white; }
+.wyd-button-primary:hover:not(:disabled) { background: #1849b8; }
+.wyd-button-secondary { color: #243f68; background: #f3f6fb; border-color: #dce4ef; }
+.wyd-button-secondary:hover:not(:disabled) { background: #e7eef9; }
+.wyd-scan-button { width: 100%; background: #ffdf66; color: #15243e; }
+.wyd-scan-button:hover { background: #ffe891; }
+.wyd-scan-button > svg:last-child, .wyd-create-qr > svg:last-child { margin-left: auto; }
+.wyd-scan-button > svg:first-child, .wyd-create-qr > svg:first-child { margin-right: auto; }
+.wyd-join-link { margin-top: 14px; padding: 18px 20px; border: 1px solid #dce4ef; border-radius: 18px; background: #fff; font-size: .875rem; }
+.wyd-join-link summary { font-weight: 700; cursor: pointer; }
+.wyd-link-entry { display: flex; align-items: stretch; gap: 8px; }
+.wyd-link-entry input { flex: 1; min-width: 0; }
+.wyd-link-entry button { flex-shrink: 0; }
+.wyd-event-card { display: flex; align-items: center; gap: 12px; padding: 20px 0 8px; }
+.wyd-icon-tile { width: 42px; height: 42px; background: #e5edfb; color: #245dd8; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.wyd-event-card > div { flex: 1; min-width: 0; }
+.wyd-event-card h2 { font-size: 1rem; font-weight: 700; }
+.wyd-event-card p { color: #607086; font-size: .875rem; margin-top: 2px; }
+.wyd-event-button, .wyd-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; border: 1px solid #dce4ef; background: #fff; color: #243f68; cursor: pointer; }
+.wyd-event-button:hover, .wyd-icon-button:hover { background: #e7eef9; }
+.wyd-event-status { color: #69768a; font-size: .8125rem; margin-left: 54px; }
+.wyd-section-heading { display: flex; gap: 12px; align-items: center; padding: 23px 26px; border-bottom: 1px solid #e4eaf3; }
+.wyd-section-heading .wyd-step { background: #eaf1ff; color: #245dd8; border: 0; }
+.wyd-section-heading h2 { font-size: 1.125rem; font-weight: 750; letter-spacing: -.02em; }
+.wyd-section-heading p { font-size: .875rem; color: #607086; margin-top: 4px; }
+.wyd-section-heading > svg { color: #7e91aa; margin-left: auto; flex-shrink: 0; }
+.wyd-compose-fields { padding: 23px 26px 22px; }
+.wyd-field-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-bottom: 20px; }
+.wyd-label { display: block; margin-bottom: 7px; color: #344860; font-size: .875rem; font-weight: 650; }
+.wyd-optional { font-size: .75rem; font-weight: 400; color: #607086; margin-left: 4px; }
+.wyd-input, .wyd-textarea, .wyd-language select { color: #142235; font-family: inherit; font-size: 1rem; background: #fbfcff; border: 1px solid #d4deec; border-radius: 12px; min-height: 46px; width: 100%; max-width: 100%; padding: 11px 13px; }
+.wyd-input::placeholder, .wyd-textarea::placeholder { color: #6f7f96; opacity: 1; }
+.wyd-textarea { resize: vertical; min-height: 170px; line-height: 1.9; padding: 16px; }
+.wyd-textarea:focus, .wyd-input:focus, .wyd-language select:focus { border-color: #245dd8; }
+.wyd-input-meta { display: flex; justify-content: space-between; align-items: start; gap: 12px; color: #607086; font-size: .75rem; margin: 5px 0 22px; }
+.wyd-input-meta > span:last-child { white-space: nowrap; }
+.wyd-over-limit { color: #b52a3c; font-weight: 700; }
+.wyd-language { min-width: 0; }
+.wyd-language select { padding-right: 22px; cursor: pointer; }
+.wyd-language.compact .wyd-select-wrap { display: flex; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid #d4deec; border-radius: 12px; background: #fff; }
+.wyd-language.compact svg { flex-shrink: 0; color: #607086; }
+.wyd-language.compact select { background: transparent; width: auto; max-width: 130px; border: 0; padding: 9px 0; font-size: .875rem; }
+.wyd-preview-controls { display: flex; align-items: end; gap: 12px; margin-bottom: 20px; }
+.wyd-preview-controls .wyd-language { flex: 1; }
+.wyd-preview-controls .wyd-button { max-width: 52%; }
+.wyd-create-qr { width: 100%; min-height: 52px; }
+.wyd-field-note { font-size: .8125rem; color: #607086; line-height: 1.7; margin-top: 11px; }
+.wyd-create-qr + .wyd-field-note { text-align: center; }
+.wyd-preview-result { background: #f2f6ff; border: 1px solid #dbe6fb; border-radius: 14px; padding: 17px; margin-bottom: 20px; }
+.wyd-result-label { font-size: .75rem; font-weight: 700; color: #496891; margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+.wyd-message-text { font-size: 1rem; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wyd-translation-status { display: flex; align-items: center; gap: 9px; color: #496891; font-size: .875rem; }
+.wyd-original-loading { color: #607086; margin-top: 12px; }
+.wyd-spinner { width: 15px; height: 15px; border: 2px solid #c2d0e7; border-top-color: #245dd8; border-radius: 50%; animation: wyd-spin .7s linear infinite; flex-shrink: 0; }
+@keyframes wyd-spin { to { transform: rotate(360deg); } }
+.wyd-error { padding: 12px 14px; background: #fff1ee; border-radius: 10px; color: #a13229; font-size: .875rem; margin: 12px 0; line-height: 1.65; }
+.wyd-text-button { font-size: .875rem; color: #245dd8; text-decoration: underline; padding: 8px 0 0; cursor: pointer; font-weight: 700; }
+.wyd-feedback { padding: 8px 0; color: #245dd8; font-size: .875rem; }
+.wyd-muted { color: #607086; font-size: 1rem; line-height: 1.75; margin: 14px 0 20px; }
+.wyd-footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 28px 0 20px; color: #607086; font-size: .8125rem; }
+.wyd-footer p { display: flex; align-items: center; gap: 8px; }
+.wyd-footer > span { font-size: .75rem; letter-spacing: .12em; }
+.wyd-install { max-width: 460px; margin: 0 auto; }
+.wyd-dialog { width: min(calc(100% - 2rem), 480px); max-height: 90dvh; margin: auto; padding: 0; border: 1px solid #dce4ef; border-radius: 24px; color: #142235; background: #fff; box-shadow: 0 25px 100px #0c244033; overflow-y: auto; }
+.wyd-dialog::backdrop { background: #10234099; backdrop-filter: blur(5px); }
+.wyd-dialog > section { padding: 24px; }
+.wyd-dialog-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.wyd-dialog-header h2 { font-size: 1.375rem; line-height: 1.4; font-weight: 750; letter-spacing: -.025em; }
+.wyd-full { width: 100%; }
+.wyd-qr-code { margin: 16px auto 24px; max-width: 360px; aspect-ratio: 1; }
+.wyd-qr-code svg { display: block; width: 100%; height: auto; }
+.wyd-share-actions { display: flex; gap: 10px; margin: 12px 0 18px; }
+.wyd-share-actions .wyd-button { flex: 1; }
+.wyd-link-input { font-size: .875rem; }
+.wyd-camera { background: #142235; min-height: 280px; border-radius: 16px; overflow: hidden; margin: 18px 0; }
+.wyd-event-form { margin-top: 24px; }
+.wyd-event-form > .wyd-input, .wyd-event-form > .wyd-textarea { margin-bottom: 18px; }
+.wyd-event-form input[type='datetime-local'] { min-width: 0; font-size: .875rem; }
+.wyd-home-link { font-size: .875rem; font-weight: 700; color: #496891; padding: 10px; }
+.wyd-reader-shell { width: min(100% - 2rem, 580px); padding: 26px 0 30px; margin: auto; }
+.wyd-reader-card { position: relative; margin: 30px 0 18px; padding: 30px; }
+.wyd-reader-accent { position: absolute; left: 0; top: 0; height: 5px; width: 100%; background: #245dd8; }
+.wyd-reader-heading { display: flex; align-items: center; gap: 13px; margin-bottom: 20px; }
+.wyd-reader-card h1 { font-size: clamp(1.5rem, 4vw, 1.875rem); font-weight: 750; line-height: 1.45; letter-spacing: -.03em; margin-bottom: 22px; }
+.wyd-sender { color: #607086; font-size: .875rem; margin: -10px 0 25px; overflow-wrap: anywhere; }
+.wyd-sender strong { font-weight: 650; color: #344860; margin-left: 10px; }
+.wyd-reader-message { margin-top: 24px; border-radius: 17px; background: #f1f5fe; padding: 23px; }
+.wyd-reader-message .wyd-message-text { font-size: 1.125rem; }
+.wyd-original { border-top: 1px solid #dce4ef; margin-top: 23px; padding-top: 17px; }
+.wyd-original summary { color: #496891; font-size: .875rem; cursor: pointer; font-weight: 600; }
+.wyd-original p { color: #607086; margin-top: 13px; }
+.wyd-reader-footer { text-align: center; font-size: .75rem; letter-spacing: .12em; color: #607086; margin-top: 30px; }
+.wyd-splash { min-height: 100dvh; display: grid; place-items: center; background: #f3f6fb; color: #142235; text-align: center; }
+.wyd-splash-word { font-size: 4rem; line-height: 1; font-weight: 900; letter-spacing: -.05em; display: block; animation: brandIntro .55s ease both; }
+.wyd-splash-word > span { color: #245dd8; }
+.wyd-splash p { margin-top: 14px; font-size: .75rem; letter-spacing: .28em; animation: brandSub .6s ease both; }
+#write { scroll-margin-top: 22px; }
+@media (min-width: 960px) { .wyd-composer { min-height: 649px; } }
+@media (max-width: 760px) {
+  .wyd-shell { width: min(100% - 2rem, 540px); padding-top: 16px; }
+  .wyd-brand { gap: 10px; }
+  .wyd-brand > span { font-size: 1.9rem; }
+  .wyd-brand small { font-size: .75rem; padding-left: 10px; letter-spacing: .07em; }
+  .wyd-page-intro { margin: 22px 0 20px; }
+  .wyd-page-intro h1 { font-size: 1.5rem; }
+  .wyd-workspace { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .wyd-scan-card { padding: 20px 22px 22px; position: relative; }
+  .wyd-scan-symbol { position: absolute; right: 20px; top: 63px; margin: 0; width: 65px; height: 65px; }
+  .wyd-scan-symbol svg { width: 56px; height: 56px; }
+  .wyd-scan-card h2 { font-size: 1.7rem; margin-top: 24px; padding-right: 67px; }
+  .wyd-scan-card > p { font-size: .9375rem; margin: 14px 0 20px; }
+  .wyd-section-heading { padding: 20px; }
+  .wyd-compose-fields { padding: 20px; }
+  .wyd-footer > span { display: none; }
+  .wyd-footer { justify-content: center; }
+  .wyd-reader-card { padding: 25px 21px; }
+  .wyd-reader-message { padding: 20px 17px; }
+}
+@media (max-width: 380px) {
+  .wyd-brand small { display: none; }
+  .wyd-field-pair { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+  .wyd-preview-controls { align-items: stretch; flex-direction: column; }
+  .wyd-preview-controls .wyd-button { max-width: none; }
+  .wyd-scan-symbol { display: none; }
+  .wyd-scan-card h2 { padding-right: 0; }
+  .wyd-section-heading > svg { display: none; }
 }

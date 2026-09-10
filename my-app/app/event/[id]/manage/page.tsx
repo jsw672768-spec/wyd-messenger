@@ -1,4 +1,5 @@
 "use client";
+import { usePreferredLanguage } from "@/lib/use-preferred-language";
 
 import {
   useEffect,
@@ -12,9 +13,8 @@ import {
   useRouter,
 } from "next/navigation";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import ParticipantRoles from "@/components/participant-roles";
+import { getSupabaseBrowser, useWydIdentity } from '@/lib/supabase-browser';
 
 
 type EventData = {
@@ -280,30 +280,7 @@ export default function ManagePage() {
       : String(rawId || "");
 
 
-  const supabase =
-    useMemo(() => {
-      const url =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_URL;
-
-      const key =
-        process.env
-          .NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-
-      if (
-        !url ||
-        !key
-      ) {
-        return null;
-      }
-
-
-      return createClient(
-        url,
-        key
-      );
-    }, []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
 
   const [
@@ -312,16 +289,10 @@ export default function ManagePage() {
   ] = useState(true);
 
 
-  const [
-    senderId,
-    setSenderId,
-  ] = useState("");
+  const { senderId } = useWydIdentity();
 
 
-  const [
-    language,
-    setLanguage,
-  ] = useState("en");
+  const [language] = usePreferredLanguage();
 
 
   const [
@@ -380,37 +351,13 @@ export default function ManagePage() {
       senderId;
 
 
-  useEffect(() => {
-    const savedSenderId =
-      localStorage.getItem(
-        "wyd_sender_id"
-      );
-
-
-    const savedLanguage =
-      localStorage.getItem(
-        "wyd_language"
-      );
-
-
-    if (savedSenderId) {
-      setSenderId(
-        savedSenderId
-      );
-    }
-
-
-    if (savedLanguage) {
-      setLanguage(
-        savedLanguage
-      );
-    }
-  }, []);
+  
 
 
   useEffect(() => {
     if (
       !supabase ||
+      !senderId ||
       !eventId
     ) {
       return;
@@ -537,6 +484,7 @@ export default function ManagePage() {
   }, [
     supabase,
     eventId,
+    senderId,
   ]);
 
 
@@ -692,6 +640,8 @@ export default function ManagePage() {
 
       <div className="mx-auto min-h-[100dvh] w-full max-w-[430px] bg-[#fffefb] px-5 pb-12 pt-6">
 
+
+        {eventData && isOrganizer && <ParticipantRoles eventId={eventId} ownerId={senderId} language={language} ended={eventData.status === 'ended'} />}
 
         {/* HEADER */}
 
