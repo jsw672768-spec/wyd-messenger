@@ -1,3 +1,4 @@
+import { jsonRecord } from './json-record.ts';
 export type TranslationInput = {
   text: string;
   sourceLanguage: string;
@@ -22,7 +23,7 @@ export async function translateText(input: TranslationInput): Promise<string> {
       body: JSON.stringify(input),
     });
     if (!response.ok) throw new Error(`Translation HTTP ${response.status}`);
-    const data = await response.json();
+    const data = jsonRecord(await response.json());
     if (typeof data.translatedText !== "string" || !data.translatedText.trim()) throw new Error("Empty translation");
     memory.set(key, data.translatedText);
     if (memory.size > MAX_CACHE) memory.delete(memory.keys().next().value!);

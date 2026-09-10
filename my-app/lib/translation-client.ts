@@ -1,3 +1,4 @@
+import { jsonRecord } from './json-record.ts';
 type Translatable = { content: string; source_language: string };
 const pending = new Map<string, Promise<string>>();
 const cache = new Map<string, { text: string; expires: number }>();
@@ -36,7 +37,7 @@ export function translateText(text: string, sourceLanguage: string, targetLangua
         body: JSON.stringify({ text, sourceLanguage, targetLanguage }),
         signal: AbortSignal.timeout(45000),
       });
-      const data = await response.json();
+      const data = jsonRecord(await response.json());
       if (!response.ok || typeof data.translatedText !== 'string' || !data.translatedText.trim()) throw new Error('Translation unavailable');
       cache.set(key, { text: data.translatedText, expires: Date.now() + 600000 });
       if (cache.size > 300) cache.delete(cache.keys().next().value!);

@@ -94,3 +94,19 @@ test('invalid language and byte limits reject before charging or contacting prov
   for(const [text,source,target] of [['Hello','xx','ko'],['가'.repeat(3001),'ko','en']]) await assert.rejects(translate(text,source,target,async()=>{charged++;}));
   assert.equal(charged,0);
 });
+
+test('malformed provider JSON fails once without retry charge or caching', async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const [index, payload] of [null, [], { responseStatus: 200, responseData: { translatedText: 42 } }].entries()) {
+      let calls = 0, charges = 0;
+      globalThis.fetch = async () => { calls++; return Response.json(payload); };
+      const text = `malformed-provider-${index}`;
+      await assert.rejects(translate(text, 'en', 'ko', async () => { charges++; }));
+      assert.equal(calls, 1); assert.equal(charges, 1);
+      globalThis.fetch = async () => { calls++; return Response.json({ responseStatus: 200, responseData: { translatedText: '복구' } }); };
+      assert.equal(await translate(text, 'en', 'ko', async () => { charges++; }), '복구');
+      assert.equal(calls, 2); assert.equal(charges, 2);
+    }
+  } finally { globalThis.fetch = original; }
+});

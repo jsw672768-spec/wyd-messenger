@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { jsonRecord } from './json-record.ts';
 export const LANGUAGES = ['en', 'ko', 'es', 'fr', 'it', 'pt', 'de', 'pl', 'ja', 'zh'];
 export const MAX_TEXT_BYTES = 9000;
 const cache = new Map<string, { text: string; expires: number }>();
@@ -59,9 +60,10 @@ async function translateChunk(text: string, source: string, target: string, dead
         metrics.providerRequests++;
         const response = await fetch(`https://api.mymemory.translated.net/get?${params}`, { cache: 'no-store', signal: AbortSignal.timeout(Math.min(8000, remaining)) });
         if (!response.ok) throw new ProviderError(response.status >= 500);
-        const data = await response.json();
-        if (Number(data.responseStatus) !== 200 || data.quotaFinished === true || typeof data.responseData?.translatedText !== 'string' || !data.responseData.translatedText.trim()) throw new ProviderError(false);
-        return prefix + decodeTranslation(data.responseData.translatedText).trim() + suffix;
+        const data = jsonRecord(await response.json());
+        const result = jsonRecord(data.responseData);
+        if (Number(data.responseStatus) !== 200 || data.quotaFinished === true || typeof result.translatedText !== 'string' || !result.translatedText.trim()) throw new ProviderError(false);
+        return prefix + decodeTranslation(result.translatedText).trim() + suffix;
       } catch (error) {
         if (attempt === 1 || (error instanceof ProviderError && !error.retryable) || deadline - Date.now() < 500) throw error;
         metrics.retries++;
